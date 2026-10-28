@@ -44,6 +44,7 @@ export function LiveApp() {
   const requests = useRef(new Map<string, AbortController>());
   const alive = useRef(true);
   const navigation = useRef(0);
+  const navigationAccount = useRef<string | null>(null);
   const busyFor = (account?: ConnectedAccount) => pending.has(account ? accountKey(account) : 'login');
   const busy = busyFor(selection?.account ?? listing?.account);
   const inboxSources = accounts.flatMap((account) => {
@@ -87,6 +88,7 @@ export function LiveApp() {
 
   function expireAccount(account: ConnectedAccount) {
     const key = accountKey(account);
+    if (navigationAccount.current === key) { navigation.current++; navigationAccount.current = null; }
     requests.current.get(key)?.abort();
     setSnapshots((current) => new Map(current).set(key, { status: 'expired', projects: [] }));
     setSelection((current) => current && accountKey(current.account) === key ? null : current);
@@ -134,12 +136,14 @@ export function LiveApp() {
     finally { pendingRef.current.delete(key); if (alive.current) setPending(new Set(pendingRef.current)); }
   }
   async function openProject(account: ConnectedAccount, project: Project) {
+    navigationAccount.current = accountKey(account);
     const version = ++navigation.current;
     const credential = await connectedAccounts.credential(account);
     const issues = await plannerClient.issues(account, credential, project);
     if (alive.current && navigation.current === version) { setListing({ account, project, issues }); setSelection(null); }
   }
   async function openIssue(account: ConnectedAccount, issueId: number, project?: Project) {
+    navigationAccount.current = accountKey(account);
     const version = ++navigation.current;
     const credential = await connectedAccounts.credential(account);
     const issue = await plannerClient.detail(account, credential, issueId);
