@@ -8,6 +8,9 @@ import { plannerClient } from '../api/nativeClient';
 import { connectedAccounts } from '../storage/connectedAccounts';
 import { ApiError, type ConnectedAccount, type Project, type Issue, type IssueSummary, type Column, type Comment, type Page, type InboxItem } from '../api/client';
 import { sakinTheme } from '../theme';
+import { PushSetupError } from '../domain/push';
+import { PushSettings } from './PushSettings';
+import { usePushResponses } from './usePushResponses';
 
 const colors = sakinTheme.colors;
 type Snapshot = { status: 'loading' | 'ready' | 'unavailable' | 'expired'; projects: Project[]; inbox?: Page<InboxItem> };
@@ -15,6 +18,13 @@ type Selection = { account: ConnectedAccount; issue: Issue; columns: Column[]; c
 type Tab = 'Projeler' | 'Bildirimler' | 'Hesaplar';
 
 function errorText(error: unknown): string {
+  if (error instanceof PushSetupError) {
+    if (error.code === 'permission') return 'Cihazın bildirim izni verilmedi. Sistem ayarlarından değiştirebilirsin.';
+    if (error.code === 'native-build') return 'Push için uygulamanın yapılandırılmış native build’i gerekir; Expo Go yeterli değil.';
+    if (error.code === 'token') return 'Cihaz token’ı alınamadı. FCM/APNs uygulama yapılandırmasını kontrol et.';
+    if (error.code === 'route-collision') return 'Cihaz yönlendirmesi başka bir hesapla çakıştı. Kayıt kabul edilmedi.';
+    return 'Push servisi kullanılamıyor. Inbox kullanılabilir.';
+  }
   if (error instanceof ApiError) {
     if (error.code === 'expired') return 'Oturum doğrulanamadı. Bu hesaba yeniden giriş yap.';
     if (error.code === 'forbidden') return 'Sunucu izin vermedi. Giriş adresini ve hesap yetkilerini kontrol et.';
@@ -53,6 +63,15 @@ export function LiveApp() {
   });
   const inboxEntries = mergeInbox(inboxSources, unreadOnly);
   const loadedUnread = mergeInbox(inboxSources, true).length;
+  usePushResponses(accounts, !restoring, async (route) => {
+    if (!alive.current || !accounts.some((account) => accountKey(account) === accountKey(route.account)) || pendingRef.current.has(accountKey(route.account))) return false;
+    let opened = false;
+    await act(async () => {
+      opened = await openIssue(route.account, route.issueId);
+      if (opened) await setRead(route.account, route.notificationId, true);
+    }, route.account);
+    return opened;
+  }, (error) => { if (alive.current) setNotice(errorText(error)); }, () => { for (const account of accounts) void refresh(account); });
 
   useEffect(() => {
     alive.current = true;
@@ -147,7 +166,8 @@ export function LiveApp() {
     const version = ++navigation.current;
     const credential = await connectedAccounts.credential(account);
     const issue = await plannerClient.detail(account, credential, issueId);
-    const resolvedProject = project ?? snapshots.get(accountKey(account))?.projects.find((item) => item.id === issue.projectId);
+    let resolvedProject = project ?? snapshots.get(accountKey(account))?.projects.find((item) => item.id === issue.projectId);
+    if (!resolvedProject) resolvedProject = (await plannerClient.projects(account, credential)).find((item) => item.id === issue.projectId);
     if (!resolvedProject || resolvedProject.id !== issue.projectId) throw new ApiError('forbidden');
     const [columns, comments] = await Promise.all([plannerClient.columns(account, credential, resolvedProject), plannerClient.comments(account, credential, issue.id)]);
     if (alive.current && navigation.current === version) { setSelection({ account, issue, columns, comments }); setComment(''); setCommentVersion((value) => value + 1); return true; }
@@ -232,7 +252,8 @@ export function LiveApp() {
               {tab === 'Bildirimler' && snapshot?.inbox?.nextCursor != null && <Button label={`${account.label}: daha fazla yükle`} disabled={busyFor(account)} onPress={() => void act(() => moreInbox(account), account)} />}
               {tab === 'Bildirimler' && snapshot?.inbox?.items.length === 0 && <Caption>Bildirim yok.</Caption>}
               {tab === 'Hesaplar' && <>
-                <Caption>Push ve cihaz kaydı henüz bağlı değil. Çıkış, bu hesabın sunucu oturumunu kapatır.</Caption>
+                <PushSettings account={account} accounts={accounts} busy={busyFor(account)} run={(work) => act(work, account)} />
+                <Caption>Çıkış önce bu cihazın kaydını iptal eder, sonra bu hesabın sunucu oturumunu kapatır.</Caption>
                 <Button label="Hesaptan çıkış yap" disabled={busyFor(account)} variant="outlined" onPress={() => void act(async () => {
                   requests.current.get(accountKey(account))?.abort();
                   await connectedAccounts.disconnect(account);

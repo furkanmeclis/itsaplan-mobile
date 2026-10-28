@@ -1,5 +1,5 @@
 import { accountKey } from './accounts';
-import { normalizeWebOrigin, ApiError, credentialPattern, type ConnectedAccount, type Credential, type PlannerClient } from '../api/client';
+import { normalizeWebOrigin, storedCredential, type ConnectedAccount, type Credential, type PlannerClient } from '../api/client';
 import type { SessionVault } from './sessionVault';
 
 export interface AccountIndex {
@@ -9,7 +9,7 @@ export interface AccountIndex {
 
 export class ConnectedAccounts {
   private mutation: Promise<unknown> = Promise.resolve();
-  constructor(private index: AccountIndex, private vault: SessionVault, private client: PlannerClient) {}
+  constructor(private index: AccountIndex, private vault: SessionVault, private client: PlannerClient, private beforeDisconnect: (account: ConnectedAccount) => Promise<void> = async () => {}) {}
 
   private exclusive<T>(work: () => Promise<T>): Promise<T> {
     const result = this.mutation.then(work, work);
@@ -35,11 +35,7 @@ export class ConnectedAccounts {
   }
 
   async credential(account: ConnectedAccount): Promise<Credential> {
-    const raw = await this.vault.read(account);
-    if (!raw) throw new ApiError('expired');
-    const value = JSON.parse(raw) as Credential;
-    if (typeof value.cookie !== 'string' || !credentialPattern.test(value.cookie)) throw new ApiError('expired');
-    return { cookie: value.cookie };
+    return storedCredential(await this.vault.read(account));
   }
 
   signIn(server: string, webOrigin: string, identifier: string, password: string): Promise<ConnectedAccount> {
@@ -66,6 +62,7 @@ export class ConnectedAccounts {
     return this.exclusive(async () => {
       const accounts = await this.list();
       const credential = await this.credential(account);
+      await this.beforeDisconnect(account);
       await this.client.signOut(account, credential);
       await this.index.write(JSON.stringify(accounts.filter((item) => accountKey(item) !== accountKey(account))));
       await this.vault.disconnect(account, async () => {});

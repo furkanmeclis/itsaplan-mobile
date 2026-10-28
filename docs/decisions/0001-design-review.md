@@ -21,3 +21,6 @@ The standalone prototype compares the same sample information across all three d
 The user selected 01 / Sakin. Colors will be configurable through shared theme values. The user also requested the latest stable Expo SDK and the universal `@expo/ui` API from one iOS/Android source. Registry evidence on 2026-10-28: Expo 58.0.20 and @expo/ui 58.0.24.
 
 Tracking: It’s a Plan `technowide-software.IPM`, accepted decision IPM-2; implementation IPM-4 and IPM-5.
+
+Registry recheck on 2026-10-28 before the push delivery advanced the selected
+patch versions to Expo 58.0.21 and @expo/ui 58.0.25; `expo install --check` passes.

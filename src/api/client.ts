@@ -10,6 +10,10 @@ export interface InboxItem { id: number; projectId: number; projectName: string;
 export interface Comment { id: number; body: string | null; actorName: string | null }
 export interface Page<T> { items: T[]; nextCursor: unknown }
 export interface Credential { cookie: string }
+export const pushEvents = ['assigned','mentioned','commented','state_changed'] as const;
+export type PushEvent = typeof pushEvents[number];
+export interface PushPreferences { enabled: boolean; events: PushEvent[] }
+export interface PushRegistration { deviceId: string; accountId: string }
 export const credentialPattern = /^(?:__Host-|__Secure-)?better-auth\.session_token=[A-Za-z0-9._~%+/=-]+$/;
 export type Fetcher = (url: string, init: RequestInit) => Promise<Response>;
 export type Failure = 'network' | 'timeout' | 'expired' | 'forbidden' | 'unsupported' | 'invalid-response' | 'redirect';
@@ -43,6 +47,22 @@ function timestamp(value: unknown): string {
   const result = string(value);
   if (!Number.isFinite(Date.parse(result))) throw new ApiError('invalid-response');
   return result;
+}
+function uuid(value: unknown): string {
+  const id = string(value);
+  if (!/^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i.test(id)) throw new ApiError('invalid-response');
+  return id.toLowerCase();
+}
+function parsePushPreferences(value: unknown): PushPreferences {
+  const item = object(value);
+  if (typeof item.enabled !== 'boolean' || !Array.isArray(item.events) || item.events.some((event) => !pushEvents.includes(event as PushEvent))) throw new ApiError('invalid-response');
+  return { enabled: item.enabled, events: [...new Set(item.events)] as PushEvent[] };
+}
+export function storedCredential(raw: string | null): Credential {
+  try { const value = JSON.parse(raw ?? '') as Credential;
+    if (typeof value.cookie === 'string' && credentialPattern.test(value.cookie)) return { cookie: value.cookie };
+  } catch {}
+  throw new ApiError('expired');
 }
 export function parseUser(value: unknown): User {
   const item = object(value);
@@ -203,6 +223,33 @@ export class PlannerClient {
   }
   async setNotificationRead(account: ConnectedAccount, credential: Credential, id: number, read: boolean): Promise<void> {
     await this.request(account.server, `/notifications/${number(id)}/read`, { method: 'POST', credential, body: { read } });
+  }
+  async pushCapabilities(account: ConnectedAccount, credential: Credential): Promise<{ push: boolean } | null> {
+    try {
+      const value = object((await this.request(account.server, '/mobile/capabilities', { credential })).value);
+      if (value.protocol !== 1 || typeof value.push !== 'boolean') throw new ApiError('unsupported');
+      return { push: value.push };
+    } catch (error) { if (error instanceof ApiError && error.status === 404) return null; throw error; }
+  }
+  async pushPreferences(account: ConnectedAccount, credential: Credential): Promise<PushPreferences> {
+    return parsePushPreferences((await this.request(account.server, '/mobile/preferences', { credential })).value);
+  }
+  async setPushPreferences(account: ConnectedAccount, credential: Credential, prefs: PushPreferences): Promise<PushPreferences> {
+    const body = parsePushPreferences(prefs);
+    return parsePushPreferences((await this.request(account.server, '/mobile/preferences', { method: 'PUT', credential, webOrigin: account.webOrigin, body })).value);
+  }
+  async registerPush(account: ConnectedAccount, credential: Credential, installationId: string, provider: 'apns' | 'fcm', token: string): Promise<PushRegistration> {
+    const body = { installationId: uuid(installationId), provider, token };
+    const value = object((await this.request(account.server, '/mobile/devices', { method: 'POST', credential, webOrigin: account.webOrigin, body })).value);
+    return { deviceId: uuid(value.deviceId), accountId: uuid(value.accountId) };
+  }
+  async unregisterPush(account: ConnectedAccount, credential: Credential, deviceId: string): Promise<void> {
+    try { await this.request(account.server, `/mobile/devices/${uuid(deviceId)}`, { method: 'DELETE', credential, webOrigin: account.webOrigin }); }
+    catch (error) { if (!(error instanceof ApiError && error.status === 404)) throw error; }
+  }
+  async resolvePush(account: ConnectedAccount, credential: Credential, notificationId: string): Promise<{ accountId: string; issueId: number; notificationId: number }> {
+    const value = object((await this.request(account.server, `/mobile/notifications/${uuid(notificationId)}`, { credential })).value);
+    return { accountId: uuid(value.accountId), issueId: number(value.issueId), notificationId: number(value.notificationId) };
   }
   async signOut(account: ConnectedAccount, credential: Credential): Promise<void> {
     await this.request(account.server, '/api/auth/sign-out', { method: 'POST', credential, webOrigin: account.webOrigin, body: {} });

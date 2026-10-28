@@ -28,6 +28,9 @@ jobs:
       - run: npx expo install --check
       - run: npm run typecheck
       - run: npm test
+      - run: npm ci --prefix services/push
+      - run: npm run typecheck --prefix services/push
+      - run: npm test --prefix services/push
       - run: npm run bundle:android
       - run: npm run bundle:ios
       - uses: actions/upload-artifact@v4
@@ -38,7 +41,7 @@ jobs:
           retention-days: 14
 
   upstream:
-    name: Real upstream HTTPS accounts and API
+    name: Real upstream HTTPS accounts, API and push queue
     runs-on: ubuntu-latest
     timeout-minutes: 15
     services:
@@ -66,6 +69,7 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+      - run: npm ci --prefix services/push
       - name: Install pinned upstream Bun runtime
         run: npm install --prefix "$RUNNER_TEMP/ipm-tools" bun@1.4.3 --no-audit --no-fund
       - name: Install upstream dependencies from lockfile

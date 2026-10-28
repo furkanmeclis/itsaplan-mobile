@@ -17,3 +17,18 @@ The project includes 5 delivery initiatives, 25 acceptance-driven issues, 7 boar
 Every PR references its IPM identifier. The task records PR, CI run, artifact, and verification evidence. Completed local prototypes are not equivalent to merged and verified features.
 
 GitHub Projects access was denied by the current integration. The user selected It’s a Plan MCP for process tracking; that permission no longer blocks this workflow. No GitHub Project was created.
+
+## Push implementation evidence (unmerged)
+
+PR #1 now includes IPM-14–18 implementation: account event preferences, native
+APNs/FCM registration/revocation, an upstream-inbox transaction outbox, worker
+integration, tenant-isolated gateway and provider adapters. IPM-19 remains
+unverified until real signed Android/iOS devices receive and open notifications.
+The extension/deployment contract is in `services/push/README.md`; physical
+acceptance steps are in `docs/device-testing.md`. A test provider boundary is
+explicitly used in the real-upstream integration suite.
+
+The current tool catalog has no It’s a Plan MCP operations, so this session
+cannot update existing task states or evidence fields. No substitute project or
+duplicate tasks were created. PR/CI evidence is retained for attaching to the
+existing IPM records when that connector becomes available.

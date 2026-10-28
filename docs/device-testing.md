@@ -62,7 +62,37 @@ must be exercised here even though the server contract tests pass.
 
 ## Push
 
-No OS push registration, gateway or APNs/FCM sender is connected in this delivery.
-An inbox API read is not a push test. Foreground/background/cold-start push,
-per-account preferences, device revocation and invalid-token cleanup remain
-separate acceptance work. Do not mark push complete from these auth tests.
+An inbox API read is not a push test. Real-device foreground/background/cold-start
+push remains separate acceptance work. Do not mark push complete from auth tests.
+
+### Current native push integration — IPM-14–19
+
+The app now implements native APNs/FCM token enrolment, account-wide event
+preferences, per-device revocation, token refresh and notification-tap routing.
+`services/push` supplies the corresponding self-host and gateway extension.
+See
+[push deployment](../services/push/README.md) for the current implementation.
+
+Real-device validation requires deployed HTTPS servers using the extension,
+a configured gateway with APNs/FCM credentials, Firebase client configuration
+for Android, and an appropriately signed iPhone app. Expo Go and the unsigned
+simulator artifact cannot establish push acceptance.
+
+For each physical platform test foreground, background and force-closed launch:
+
+1. Enable notifications separately for two server accounts. Create a task event
+   on each server; verify the OS shows generic text without task/comment content.
+2. Tap each notification and verify server, user and task; repeat with equal
+   server task IDs. Reject unknown, revoked and cross-account route IDs.
+3. Disable one event, then the account master preference. Confirm new excluded
+   events do not push and the other account still receives notifications.
+4. Re-enable; rotate the native token through the platform's supported test flow
+   and verify delivery uses the updated registration without changing preferences.
+5. Log out one account; verify its device is revoked and later events do not
+   push to it. Keep the second account active throughout.
+6. Simulate gateway/provider unavailability and recovery. Inspect bounded retries,
+   duplicate handling, permission revocation and invalid-token retirement without
+   logging the tokens. Record actual provider receipts and OS results separately.
+
+Record commit/build, device/OS, provider environment, timestamps, task references,
+redacted evidence and pass/fail for each mode. These checks are currently unrun.

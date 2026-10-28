@@ -3,5 +3,6 @@
   "compilerOptions": {
     "strict": true,
     "types": ["react", "node"]
-  }
+  },
+  "exclude": ["services", "node_modules", "android", "ios", "integration/*.mjs"]
 }
