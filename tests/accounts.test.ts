@@ -125,6 +125,18 @@ test('a hanging account times out and aborts even when its loader ignores cancel
   assert.deepEqual(results[1], { account: second, status: 'ready', value: 'Available' });
 });
 
+test('an invalid account does not prevent another account from loading', async () => {
+  const invalid = { ...first, server: 'not-a-server-url' };
+  const loaded: Account[] = [];
+  const results = await loadAccounts([invalid, second], async (account) => {
+    loaded.push(account);
+    return 'Available';
+  });
+  assert.equal(results[0].status, 'unavailable');
+  assert.deepEqual(results[1], { account: second, status: 'ready', value: 'Available' });
+  assert.deepEqual(loaded, [second]);
+});
+
 test('demo fixtures are fresh and deliberately contain colliding remote IDs', () => {
   const data = createDemoData();
   assert.equal(data[0].tasks[0].id, data[1].tasks[0].id);

@@ -58,7 +58,7 @@ foundations; real API loading and OS notification callbacks are not connected.
 ## CI and artifacts
 
 The `Mobile` workflow performs a clean `npm ci`, compatibility check, typecheck,
-12 isolation tests, and separate Android/iOS Hermes bundle exports. Native jobs
+13 isolation tests, and separate Android/iOS Hermes bundle exports. Native jobs
 depend on that validation job:
 
 - `mobile-platform-bundles`: generated Android/iOS JavaScript and metadata.
@@ -69,7 +69,7 @@ depend on that validation job:
   `xcrun simctl install booted <application.app>`. Debug builds require Metro.
 
 Artifacts expire after 14 days. The iOS job uses macOS 26/Xcode; Android uses
-JDK 17, API 37 and NDK 27.1.12297006, matching React Native's installed toolchain
+JDK 21, API 37.0, build tools 37 and NDK 27.1.12297006, matching React Native's installed toolchain
 metadata. Generated `android/` and `ios/` projects are ignored and recreated by
 Expo prebuild. The HTML design artifact workflow remains separate.
 
@@ -82,7 +82,7 @@ checked on 2026-10-28. References:
 - [Official documentation source](https://github.com/expo/expo/blob/sdk-58/docs/pages/versions/v58.0.0/sdk/ui/universal/index.mdx)
 - [Expo template](https://www.npmjs.com/package/expo-template-blank-typescript/v/58.0.29)
 
-Local clean installation, typecheck, 12 tests, both platform bundle exports and
+Local clean installation, typecheck, 13 tests, both platform bundle exports and
 native project generation passed. A generated native project is not a compiled
 APK or simulator application. Native CI results must be read before IPM-7 is
 accepted. Native UI rendering, real sessions, real-server mutations, push and

@@ -50,13 +50,16 @@ jobs:
         with:
           node-version: 24
           cache: npm
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
-          java-version: 17
+          java-version: 21
       - uses: android-actions/setup-android@v3
+        with:
+          cmdline-tools-version: '16111833'
+          packages: platform-tools
       - name: Install SDK toolchain required by React Native 0.88
-        run: sdkmanager 'platforms;android-37' 'build-tools;36.0.0' 'ndk;27.1.12297006'
+        run: sdkmanager 'platforms;android-37.0' 'build-tools;37.0.0' 'ndk;27.1.12297006'
       - run: npm ci
       - run: npx expo prebuild --platform android --no-install
       - name: Build debug APK for device and emulator

@@ -11,10 +11,10 @@ export async function loadAccounts<T>(
 ): Promise<AccountResult<T>[]> {
   if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) throw new Error('Invalid timeout.');
   return Promise.all(accounts.map(async (account): Promise<AccountResult<T>> => {
-    accountKey(account);
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {
+      accountKey(account);
       const timeout = new Promise<never>((_, reject) => {
         timer = setTimeout(() => {
           controller.abort();
