@@ -82,12 +82,23 @@ def tap(root, label):
     adb("shell", "input", "tap", str((values[0] + values[2]) // 2), str((values[1] + values[3]) // 2))
 
 
-def label_height(root, label):
+def label_size(root, label):
     node = next(node for node in root.iter("node") if label in node.get("text", "") or label in node.get("content-desc", ""))
     values = [int(value) for value in re.findall(r"-?\d+", node.get("bounds", ""))]
     if len(values) != 4:
         raise AssertionError("Missing text bounds: " + label)
-    return values[3] - values[1]
+    return values[2] - values[0], values[3] - values[1]
+
+
+def label_height(root, label):
+    return label_size(root, label)[1]
+
+
+def text_grew(root, label, baseline):
+    width, height = label_size(root, label)
+    # Android 14+ scales text nonlinearly: larger headings grow less than body text.
+    # Check real growth in both dimensions, not an assumed percentage of font_scale.
+    return width > baseline[0] and height > baseline[1]
 
 
 def launch():
@@ -112,7 +123,7 @@ def main(apk_path):
         adb("shell", "settings", "put", "system", "font_scale", "1.0")
         launch()
         root, data = wait_ui(["Sunucu hesapları", "Demoyu incele", "Sunucuya bağlan"])
-        baseline_height = label_height(root, "Sunucuya bağlan")
+        baseline = label_size(root, "Sunucuya bağlan")
         capture("01-account-entry", data)
         report["checks"].append("native account-entry screen rendered")
         tap(root, "Demoyu incele")
@@ -126,13 +137,14 @@ def main(apk_path):
         adb("shell", "settings", "put", "system", "font_scale", "1.3")
         launch()
         root, data = wait_ui(["Sunucu hesapları", "Demoyu incele", "Sunucuya bağlan"],
-                             ready=lambda root: label_height(root, "Sunucuya bağlan") >= baseline_height * 1.1)
+                             ready=lambda root: text_grew(root, "Sunucuya bağlan", baseline))
         observed_scale = float(adb("shell", "settings", "get", "system", "font_scale").decode().strip())
-        scaled_height = label_height(root, "Sunucuya bağlan")
-        if observed_scale < 1.29 or scaled_height < baseline_height * 1.1:
+        scaled = label_size(root, "Sunucuya bağlan")
+        if observed_scale < 1.29 or not text_grew(root, "Sunucuya bağlan", baseline):
             raise AssertionError("Large-font screen did not expose fresh, scaled text bounds")
         report["fontScale"] = observed_scale
-        report["textHeightPx"] = {"normal": baseline_height, "large": scaled_height}
+        report["textHeightPx"] = {"normal": baseline[1], "large": scaled[1]}
+        report["textWidthPx"] = {"normal": baseline[0], "large": scaled[0]}
         capture("04-large-font-entry", data)
         report["checks"].append("account entry rendered at system font scale 1.3")
         report["status"] = "passed"

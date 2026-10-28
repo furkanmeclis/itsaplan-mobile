@@ -60,6 +60,18 @@ class EvidenceFreshness(unittest.TestCase):
         self.assertEqual(device.dumps, 2)
 
 
+class NonlinearFontScaling(unittest.TestCase):
+    def test_android_15_heading_growth_does_not_require_ten_percent_height(self):
+        import xml.etree.ElementTree as ET
+        # Sanitized bounds observed at font_scale 1.0 and 1.3 in the native APK.
+        normal = ET.fromstring('<hierarchy><node text="Heading" bounds="[45,307][229,335]"/></hierarchy>')
+        large = ET.fromstring('<hierarchy><node text="Heading" bounds="[45,319][248,349]"/></hierarchy>')
+        baseline = smoke.label_size(normal, "Heading")
+        self.assertFalse(smoke.text_grew(normal, "Heading", baseline))
+        self.assertTrue(smoke.text_grew(large, "Heading", baseline))
+        self.assertLess(smoke.label_height(large, "Heading"), baseline[1] * 1.1)
+
+
 class LauncherRecovery(unittest.TestCase):
     def test_only_system_launcher_anr_is_recovered_once(self):
         import xml.etree.ElementTree as ET
