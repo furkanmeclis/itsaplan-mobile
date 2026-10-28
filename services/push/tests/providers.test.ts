@@ -33,10 +33,12 @@ test('FCM uses signed OAuth, fixed Google endpoints, generic content and caches 
 });
 test('APNs selects its environment, signs ES256, preserves idempotency and retires invalid tokens', async () => {
   const { privateKey, publicKey } = generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
-  let calls = 0;
+  let calls = 0; let previousAuthorization: string | undefined;
   const send = apnsSender({ key: privateKey, keyId: 'ABCDEFGHIJ', teamId: '0123456789', topic: 'software.technowide.itsaplan', sandbox: true }, async (host, _token, headers, body) => {
     assert.equal(host, 'api.sandbox.push.apple.com');
     assert.equal(headers['apns-id'], id);
+    if (previousAuthorization) assert.equal(headers.authorization, previousAuthorization);
+    previousAuthorization = headers.authorization;
     const [header, claims, signature] = headers.authorization.slice(7).split('.');
     assert.equal(JSON.parse(Buffer.from(header, 'base64url').toString()).alg, 'ES256');
     assert.ok(verify('SHA256', Buffer.from(`${header}.${claims}`), { key: publicKey, dsaEncoding: 'ieee-p1363' }, Buffer.from(signature, 'base64url')));
@@ -48,4 +50,17 @@ test('APNs selects its environment, signs ES256, preserves idempotency and retir
   assert.deepEqual(await send('apns', 'f'.repeat(64), data, id), { status: 'retired', code: 'apns_token_invalid' });
   assert.equal(retryAfter('9999999999'), 86400000);
   assert.equal(retryAfter('invalid'), 0);
+});
+
+
+test('FCM retires known invalid tokens and honors retry-after without exposing provider bodies', async () => {
+  const { privateKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
+  let status = 404;
+  const send = fcmSender({ client_email: 'sender@example.com', project_id: 'test-project', private_key: privateKey.export({ type: 'pkcs8', format: 'pem' }).toString() }, async (input) => {
+    if (String(input).includes('oauth2.googleapis.com')) return Response.json({ access_token: 'test', expires_in: 3600 });
+    return status === 404 ? Response.json({ error: { message: 'PRIVATE PROVIDER BODY', details: [{ errorCode: 'UNREGISTERED' }] } }, { status }) : new Response('PRIVATE PROVIDER BODY', { status, headers: { 'Retry-After': '90' } });
+  });
+  assert.deepEqual(await send('fcm','synthetic-token',data,id), { status: 'retired', code: 'fcm_token_invalid' });
+  status = 429;
+  assert.deepEqual(await send('fcm','synthetic-token',data,id), { status: 'retry', code: 'fcm_429', retryAfterMs: 90000 });
 });

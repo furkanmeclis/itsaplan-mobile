@@ -8,5 +8,5 @@ const [{ startWorkers }, { startPollLoop }] = await Promise.all([
   import(pathToFileURL(`${process.env.UPSTREAM_ROOT}/apps/worker/src/poll-loop.ts`).href),
 ]);
 startWorkers();
-const worker = startPollLoop('mobile-push', runtime.tick, () => 1000);
+const worker = startPollLoop('mobile-push', async () => { try { await runtime.tick(); } catch { console.error('mobile_tick_failed'); } }, () => 1000);
 process.on('SIGTERM', () => worker.stop());

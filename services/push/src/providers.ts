@@ -108,12 +108,15 @@ export const apnsTransport: ApnsTransport = async (host, token, headers, body) =
 export function apnsSender(credentials: ApnsCredentials, transport: ApnsTransport = apnsTransport): Sender {
   if (!/^[A-Z0-9]{10}$/.test(credentials.keyId) || !/^[A-Z0-9]{10}$/.test(credentials.teamId) || !/^[A-Za-z0-9.-]{3,200}$/.test(credentials.topic)) throw new Error('Invalid APNs configuration.');
   if (credentials.key.asymmetricKeyType !== 'ec' || credentials.key.asymmetricKeyDetails?.namedCurve !== 'prime256v1') throw new Error('APNs requires a P-256 signing key.');
+  let cachedAuthorization: { token: string; until: number } | null = null;
   return async (_provider, token, data, id) => {
     try {
-      const authorization = jwt({ alg: 'ES256', kid: credentials.keyId }, { iss: credentials.teamId, iat: Math.floor(Date.now() / 1000) }, credentials.key, 'SHA256');
+      if (!cachedAuthorization || cachedAuthorization.until <= Date.now()) cachedAuthorization = { token: jwt({ alg: 'ES256', kid: credentials.keyId }, { iss: credentials.teamId, iat: Math.floor(Date.now() / 1000) }, credentials.key, 'SHA256'), until: Date.now() + 50 * 60000 };
+      const authorization = cachedAuthorization.token;
       const response = await transport(credentials.sandbox ? 'api.sandbox.push.apple.com' : 'api.push.apple.com', token,
         { authorization: `bearer ${authorization}`, 'apns-topic': credentials.topic, 'apns-push-type': 'alert', 'apns-id': id, 'apns-expiration': String(Math.floor(Date.now() / 1000) + 3600) },
         JSON.stringify({ aps: { alert: { title: 'It’s a Plan', body: 'Yeni bir bildirimin var.' }, sound: 'default' }, ...data }));
+      if (response.reason === 'ExpiredProviderToken') cachedAuthorization = null;
       if (response.status === 200) return { status: 'sent' };
       if (response.status === 410 || (response.status === 400 && ['BadDeviceToken','DeviceTokenNotForTopic'].includes(response.reason ?? ''))) return { status: 'retired', code: 'apns_token_invalid' };
       if (response.status === 429 || response.status >= 500 || response.reason === 'ExpiredProviderToken') return { status: 'retry', code: `apns_${response.status}`, retryAfterMs: retryAfter(response.retryAfter ?? null) };

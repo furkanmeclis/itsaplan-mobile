@@ -105,7 +105,7 @@ test('filtered issue lists use the actual upstream summary shape and the authent
   assert.equal(new URL(requested).searchParams.get('assigneeUserId'), first.userId);
 });
 
-function repository() {
+function repository(beforeDisconnect: ConstructorParameters<typeof ConnectedAccounts>[3] = async () => {}) {
   let index: string | null = null;
   let indexFails = false;
   let signOutFails = false;
@@ -115,7 +115,7 @@ function repository() {
   const accounts = new ConnectedAccounts({ read: async () => index, write: async (value) => { if (indexFails) throw new Error('Disk full'); index = value; } }, vault, new PlannerClient(async (url, init) => {
     if (signOutFails && url.endsWith('/sign-out')) return new Response(null, { status: 503 });
     return fetcher(url, init);
-  }));
+  }), beforeDisconnect);
   return { accounts, secrets, calls, readIndex: () => index, failIndex: () => { indexFails = true; }, failSignOut: () => { signOutFails = true; } };
 }
 
@@ -152,4 +152,20 @@ test('failed server logout preserves the account and secret for retry', async ()
   assert.deepEqual(await accounts.list(), [account]);
   assert.equal(secrets.size, 1);
   assert.deepEqual(await accounts.credential(account), credential);
+});
+
+
+test('push revocation is awaited before sign-out and failure retains the session for retry', async () => {
+  let fail = true;
+  const { accounts, calls } = repository(async (account) => {
+    assert.deepEqual(await accounts.credential(account), credential);
+    assert.equal(calls.some((call) => call.url.endsWith('/sign-out')), false);
+    if (fail) throw new Error('Gateway unavailable');
+  });
+  const account = await accounts.signIn(first.server, first.webOrigin, 'first@example.test', 'test-password');
+  await assert.rejects(accounts.disconnect(account));
+  assert.deepEqual(await accounts.list(), [account]);
+  fail = false; await accounts.disconnect(account);
+  assert.equal(calls.at(-1)?.url.endsWith('/sign-out'), true);
+  assert.deepEqual(await accounts.list(), []);
 });
