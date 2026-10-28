@@ -10,6 +10,7 @@ from pathlib import Path
 
 PACKAGE = "software.technowide.itsaplan.mobile"
 OUTPUT = Path("test-results/android-ui")
+RECOVERIES = []
 
 
 def adb(*args, timeout=30):
@@ -33,6 +34,10 @@ def wait_ui(labels, timeout=180, ready=None):
     while time.monotonic() < deadline:
         try:
             root, data = hierarchy()
+            # Hosted emulators occasionally show a launcher ANR over a healthy app.
+            # Handle only this exact system dialog once; app ANRs must still fail.
+            if recover_launcher(root, data):
+                continue
             values = text_values(root)
             if all(any(label in value for value in values) for label in labels) and (ready is None or ready(root)):
                 return root, data
@@ -40,6 +45,18 @@ def wait_ui(labels, timeout=180, ready=None):
             pass
         time.sleep(3)
     raise AssertionError("Native UI did not expose the expected labels: " + ", ".join(labels))
+
+
+def recover_launcher(root, data):
+    title = next((node for node in root.iter("node")
+                  if node.get("resource-id") == "android:id/alertTitle"
+                  and node.get("package") == "android"), None)
+    if title is None or title.get("text") != "Pixel Launcher isn't responding" or RECOVERIES:
+        return False
+    capture("launcher-anr", data)
+    tap(root, "Close app")
+    RECOVERIES.append("closed Pixel Launcher system ANR dialog once")
+    return True
 
 
 def capture(name, data):
@@ -143,6 +160,7 @@ def main(apk_path):
             adb("shell", "settings", "put", "system", "font_scale", "1.0")
         except Exception:
             pass
+        report["emulatorRecoveries"] = list(RECOVERIES)
         (OUTPUT / "report.json").write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n")
 
 

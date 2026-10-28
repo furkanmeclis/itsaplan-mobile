@@ -60,5 +60,24 @@ class EvidenceFreshness(unittest.TestCase):
         self.assertEqual(device.dumps, 2)
 
 
+class LauncherRecovery(unittest.TestCase):
+    def test_only_system_launcher_anr_is_recovered_once(self):
+        import xml.etree.ElementTree as ET
+        for package, title, expected in [
+            ("android", "Pixel Launcher isn't responding", True),
+            ("android", "It's a Plan isn't responding", False),
+            (smoke.PACKAGE, "Pixel Launcher isn't responding", False),
+        ]:
+            root = ET.Element("hierarchy")
+            ET.SubElement(root, "node", {"package": package, "resource-id": "android:id/alertTitle", "text": title})
+            with self.subTest(package=package, title=title), patch.object(smoke, "RECOVERIES", []), patch.object(smoke, "capture"), patch.object(smoke, "tap") as tap:
+                self.assertEqual(smoke.recover_launcher(root, b"xml"), expected)
+                if expected:
+                    self.assertFalse(smoke.recover_launcher(root, b"xml"))
+                    tap.assert_called_once_with(root, "Close app")
+                else:
+                    tap.assert_not_called()
+
+
 if __name__ == "__main__":
     unittest.main()
