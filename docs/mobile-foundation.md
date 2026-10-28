@@ -72,7 +72,7 @@ HTTPS integration job:
 - `mobile-android-debug-apk`: Gradle debug APK for arm64 devices and x86_64 emulators.
   This development APK requires Metro (`npm start` and `adb reverse tcp:8081 tcp:8081`
   for a USB-connected Android device). It is not a standalone release binary.
-- `mobile-android-standalone-preview`: development-key signed arm64 APK with
+- `mobile-android-standalone-preview`: development-key signed arm64/x86_64 APK with
   embedded JavaScript for device testing without Metro; not store distribution.
 - `mobile-ios-simulator-app`: unsigned simulator `.app` inside a ZIP; install with
   `xcrun simctl install booted <application.app>`. Debug builds require Metro.
@@ -114,8 +114,9 @@ holds operator fixtures. It does not replace the IPM process project.
 
 ## Android UI evidence
 
-After native builds, `android-ui` installs the matching debug APK on an Android
-15/API 35 x86_64 emulator and connects it to Metro from the same checkout. It
+After native builds, `android-ui` installs the matching standalone APK on an Android
+15/API 35 x86_64 emulator. Its JavaScript is embedded from the same checkout;
+no development server is used. It
 checks account entry, labeled demo navigation, return navigation and rendering
 at system font scale 1.3. Each hierarchy dump removes the previous file first;
 font-scale evidence must expose larger text bounds, and regression tests prevent

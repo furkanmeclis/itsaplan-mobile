@@ -4,8 +4,8 @@ import re
 import subprocess
 import sys
 import time
-import urllib.request
 import xml.etree.ElementTree as ET
+import zipfile
 from pathlib import Path
 
 PACKAGE = "software.technowide.itsaplan.mobile"
@@ -102,20 +102,13 @@ def main(apk_path):
     try:
         apk = Path(apk_path).resolve()
         if not apk.is_file():
-            raise AssertionError("Debug APK missing")
-        deadline = time.monotonic() + 90
-        while True:
-            try:
-                with urllib.request.urlopen("http://127.0.0.1:8081/status", timeout=2) as response:
-                    if response.read(128).strip() == b"packager-status:running":
-                        break
-            except OSError:
-                pass
-            if time.monotonic() >= deadline:
-                raise AssertionError("Metro did not become ready")
-            time.sleep(1)
+            raise AssertionError("Standalone APK missing")
+        with zipfile.ZipFile(apk) as archive:
+            if archive.getinfo("assets/index.android.bundle").file_size <= 0:
+                raise AssertionError("Standalone APK has no embedded JavaScript")
+            if not any(name.startswith("lib/x86_64/") for name in archive.namelist()):
+                raise AssertionError("Standalone APK has no emulator-native libraries")
         adb("install", "-r", str(apk), timeout=120)
-        adb("reverse", "tcp:8081", "tcp:8081")
         adb("shell", "settings", "put", "system", "font_scale", "1.0")
         launch()
         root, data = wait_ui(["Sunucu hesapları", "Demoyu incele", "Sunucuya bağlan"])
