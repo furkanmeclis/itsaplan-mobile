@@ -4,7 +4,7 @@ Process source of truth: **It’s a Plan Mobile**, project `technowide-software.
 
 Code and PR review: https://github.com/furkanmeclis/itsaplan-mobile
 
-The project includes 5 delivery initiatives, 25 acceptance-driven issues, 7 board states, 7 saved views, 7 area labels, 6 documents, 3 task templates, and PR/build evidence URL fields. Task dependencies are recorded as blocking relations.
+The project includes 5 delivery initiatives, 25 acceptance-driven issues, 7 board states, 7 saved views, 7 area labels, 7 documents, 3 task templates, and PR/build evidence URL fields. Task dependencies are recorded as blocking relations.
 
 ## Task map
 
@@ -18,9 +18,9 @@ Every PR references its IPM identifier. The task records PR, CI run, artifact, a
 
 GitHub Projects access was denied by the current integration. The user selected It’s a Plan MCP for process tracking; that permission no longer blocks this workflow. No GitHub Project was created.
 
-## Push implementation evidence (unmerged)
+## Push implementation evidence (merged in PR #1)
 
-PR #1 now includes IPM-14–18 implementation: account event preferences, native
+Merged PR #1 includes IPM-14–18 implementation: account event preferences, native
 APNs/FCM registration/revocation, an upstream-inbox transaction outbox, worker
 integration, tenant-isolated gateway and provider adapters. IPM-19 remains
 unverified until real signed Android/iOS devices receive and open notifications.
@@ -35,9 +35,10 @@ existing IPM project remains the process source. Native cookie authentication an
 real-device push remain separate acceptance work.
 
 
-IPM-22: the Mobile workflow runs the debug APK on an Android 15 emulator after
+IPM-22: the Mobile workflow runs the standalone APK on an Android 15 emulator after
 native compilation. The smoke check opens real account entry, switches to the
 explicitly labeled local demo, returns, and renders account entry at font scale
-1.3. PNGs, accessibility hierarchy XML and a JSON report are retained as
+1.3 and 2.0. Maximum-font navigation, scrolling to the login control and software
+keyboard open/dismiss checks extend this evidence. PNGs, accessibility hierarchy XML and a JSON report are retained as
 `mobile-android-ui-evidence`. These checks use no server credentials, native login
 or APNs/FCM delivery. Physical Android/iOS accessibility acceptance remains open.

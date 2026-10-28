@@ -95,8 +95,9 @@ Local clean installation, both typechecks, 42 mobile tests, 6 service tests,
 both platform bundle exports and the real upstream integration scenarios passed. A generated native project is not a compiled
 APK or simulator application. Native CI results must be read before IPM-7 is
 accepted. Real upstream session/mutation contracts are verified by the HTTPS
-integration suite. Native UI rendering, OS session behavior and actual provider
-side/device push delivery remain unverified.
+integration suite. Android native entry/demo rendering and 1.3 font scaling passed the emulator
+check in CI 40768519614. OS session behavior and actual provider-side/device push
+delivery remain unverified.
 
 `npm audit` reports two upstream toolchain advisories affecting eight dependency
 nodes (three high, five low): Zod collection validation
@@ -118,7 +119,11 @@ After native builds, `android-ui` installs the matching standalone APK on an And
 15/API 35 x86_64 emulator. Its JavaScript is embedded from the same checkout;
 no development server is used. It
 checks account entry, labeled demo navigation, return navigation and rendering
-at system font scale 1.3. Each hierarchy dump removes the previous file first;
+at system font scales 1.3 and 2.0. At 2.0 it also exercises demo/return navigation
+and scrolls the form to its login control without pressing it. A separate check
+types only `https://mobile.invalid`, verifies the software keyboard is shown,
+and dismisses it with Back while preserving the field. No login is submitted.
+Each hierarchy dump removes the previous file first;
 font-scale evidence must expose larger text width and height, and regression tests prevent
 stale UI labels from being accepted after a failed dump. `mobile-android-ui-evidence` contains PNG screenshots,
 UI hierarchy XML, a report and fresh-emulator app logs. No live account is enrolled
@@ -129,5 +134,8 @@ or provider-delivery acceptance.
 Android 14+ uses [nonlinear font scaling](https://developer.android.com/about/versions/14/features#non-linear-font-scaling):
 a heading can grow less than 10% in height at font scale 1.3. The check requires
 actual growth in both dimensions and the requested system setting, rather than
-a fixed percentage. Physical-device, screen-reader and maximum 200% font-size
+a fixed percentage. At scale 2.0 text may wrap, so heading height must exceed
+the 1.3 height and visible bounds/navigation are verified instead of requiring
+unwrapped width growth. The common Expo UI header stacks vertically when
+font-adjusted window width is below 250 dp. Physical-device and screen-reader
 acceptance remain separate work.

@@ -2,6 +2,7 @@
 import importlib.util
 import subprocess
 import unittest
+import xml.etree.ElementTree as ET
 from pathlib import Path
 from unittest.mock import patch
 
@@ -89,6 +90,32 @@ class LauncherRecovery(unittest.TestCase):
                     tap.assert_called_once_with(root, "Close app")
                 else:
                     tap.assert_not_called()
+
+
+class FormEvidence(unittest.TestCase):
+    def test_offscreen_or_empty_bounds_cannot_prove_reachable_control(self):
+        for bounds, expected in [("[0,0][0,0]", False), ("[20,650][140,700]", False),
+                                 ("[-10,30][140,80]", False), ("[20,400][140,450]", True)]:
+            root = ET.Element("hierarchy")
+            ET.SubElement(root, "node", {"text": "Giriş yap", "bounds": bounds})
+            with self.subTest(bounds=bounds):
+                self.assertEqual(smoke.visible_label(root, "Giriş yap", (320, 640)), expected)
+
+    def test_keyboard_request_alone_is_not_visible_keyboard_evidence(self):
+        for state, expected in [(b"mShowRequested=true mInputShown=false", False),
+                                (b"mInputShown=true", True), (b"mIsInputViewShown=true", True)]:
+            with self.subTest(state=state), patch.object(smoke, "adb", return_value=state):
+                self.assertEqual(smoke.keyboard_visible(), expected)
+
+    def test_scroll_waits_for_visible_bounds_instead_of_matching_offscreen_text(self):
+        hidden = '<hierarchy><node text="Giriş yap" bounds="[0,0][0,0]"/></hierarchy>'.encode()
+        visible = '<hierarchy><node text="Giriş yap" bounds="[20,400][140,450]"/></hierarchy>'.encode()
+        frames = [(ET.fromstring(data), data) for data in (hidden, visible)]
+        with patch.object(smoke, "hierarchy", side_effect=frames), patch.object(smoke, "adb") as adb, patch.object(smoke.time, "sleep"):
+            root, data = smoke.scroll_to_label("Giriş yap", (320, 640))
+        self.assertEqual(data, visible)
+        adb.assert_called_once()
+        self.assertTrue(smoke.visible_label(root, "Giriş yap", (320, 640)))
 
 
 if __name__ == "__main__":

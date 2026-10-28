@@ -24,3 +24,14 @@ Tracking: It’s a Plan `technowide-software.IPM`, accepted decision IPM-2; impl
 
 Registry recheck on 2026-10-28 before the push delivery advanced the selected
 patch versions to Expo 58.0.21 and @expo/ui 58.0.25; `expo install --check` passes.
+
+## Large-text navigation — IPM-22
+
+The shared account/demo header uses an Expo UI column when window width divided
+by system font scale is below 250 dp; otherwise it uses a row. This keeps the
+navigation action available on narrow screens with large text. The selected
+Sakin theme and one universal Android/iOS implementation remain in use.
+
+Android emulator evidence checks 1.3/2.0 font scales, navigation and form
+scrolling. Physical-device and screen-reader acceptance is tracked separately.
+Review: https://github.com/furkanmeclis/itsaplan-mobile/pull/3

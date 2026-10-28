@@ -24,7 +24,7 @@ artifact requires the owner's Apple development/provisioning setup.
 For a local device build on a Mac with Xcode, clone the PR branch and use:
 
 ```sh
-git checkout feat/mobile-foundation
+git checkout main
 npm ci
 npm run ios -- --device
 ```
@@ -96,3 +96,18 @@ For each physical platform test foreground, background and force-closed launch:
 
 Record commit/build, device/OS, provider environment, timestamps, task references,
 redacted evidence and pass/fail for each mode. These checks are currently unrun.
+
+## Accessibility — IPM-22
+
+Android CI exercises the standalone app at normal, 1.3 and 2.0 system font scales,
+including demo/return actions, scrolling to the login control, and opening and
+dismissing the software keyboard with a reserved `.invalid` URL. Consult the
+actual run report before claiming a check passed. The common header switches to
+a vertical arrangement when its font-adjusted available width is narrow.
+
+On each physical Android/iOS device, also check maximum text, VoiceOver/TalkBack
+reading order and labels, touch areas, safe areas, URL/email/password keyboard
+behavior, password masking and access to the login action while the keyboard is
+open. Record device/OS, font setting, commit/build and pass/fail. Avoid screenshots
+containing real credentials, accounts or provider tokens. Emulator evidence does
+not close physical-device or screen-reader acceptance.

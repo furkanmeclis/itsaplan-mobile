@@ -101,6 +101,40 @@ def text_grew(root, label, baseline):
     return width > baseline[0] and height > baseline[1]
 
 
+def display_size():
+    sizes = re.findall(r"(?:Physical|Override) size: (\d+)x(\d+)", adb("shell", "wm", "size").decode())
+    if not sizes:
+        raise AssertionError("Cannot read emulator display size")
+    return tuple(map(int, sizes[-1]))
+
+
+def visible_label(root, label, display):
+    for node in root.iter("node"):
+        if not any(label in node.get(key, "") for key in ("text", "content-desc")):
+            continue
+        bounds = list(map(int, re.findall(r"-?\d+", node.get("bounds", ""))))
+        if len(bounds) == 4 and 0 <= bounds[0] < bounds[2] <= display[0] and 0 <= bounds[1] < bounds[3] <= display[1]:
+            return True
+    return False
+
+
+def keyboard_visible():
+    state = adb("shell", "dumpsys", "input_method").decode()
+    return bool(re.search(r"\bm(?:InputShown|IsInputViewShown)=true\b", state))
+
+
+def scroll_to_label(label, display):
+    for attempt in range(11):
+        root, data = hierarchy()
+        if visible_label(root, label, display):
+            return root, data
+        if attempt < 10:
+            adb("shell", "input", "swipe", str(display[0] // 2), str(int(display[1] * .8)),
+                str(display[0] // 2), str(int(display[1] * .4)), "400")
+            time.sleep(.5)
+    raise AssertionError("Cannot scroll to visible control: " + label)
+
+
 def launch():
     adb("shell", "am", "force-stop", PACKAGE)
     adb("shell", "am", "start", "-n", PACKAGE + "/.MainActivity")
@@ -147,6 +181,43 @@ def main(apk_path):
         report["textWidthPx"] = {"normal": baseline[0], "large": scaled[0]}
         capture("04-large-font-entry", data)
         report["checks"].append("account entry rendered at system font scale 1.3")
+
+        display = display_size()
+        adb("shell", "settings", "put", "secure", "show_ime_with_hard_keyboard", "1")
+        adb("shell", "settings", "put", "system", "font_scale", "1.0")
+        launch()
+        root, data = wait_ui(["HTTPS API adresi"])
+        tap(root, "HTTPS API adresi")
+        probe = "https://mobile.invalid"
+        adb("shell", "input", "text", probe)
+        root, data = wait_ui([probe], ready=lambda root: keyboard_visible() and visible_label(root, probe, display))
+        capture("05-url-keyboard-open", data)
+        report["checks"].append("URL field accepts reserved test address with software keyboard visible")
+        adb("shell", "input", "keyevent", "KEYCODE_BACK")
+        root, data = wait_ui([probe], ready=lambda root: not keyboard_visible())
+        capture("06-url-keyboard-closed", data)
+        report["checks"].append("back dismisses keyboard and preserves URL field without submitting login")
+        report["keyboard"] = {"opened": True, "dismissedWithBack": True}
+
+        adb("shell", "settings", "put", "system", "font_scale", "2.0")
+        launch()
+        root, data = wait_ui(["Sunucu hesapları", "Demoyu incele", "Sunucuya bağlan"],
+                             ready=lambda root: label_height(root, "Sunucuya bağlan") > scaled[1]
+                             and all(visible_label(root, label, display) for label in ["Sunucu hesapları", "Demoyu incele", "Sunucuya bağlan"]))
+        maximum_scale = float(adb("shell", "settings", "get", "system", "font_scale").decode().strip())
+        if maximum_scale < 1.99:
+            raise AssertionError("Maximum system font setting did not apply")
+        report["maximumFontScale"] = maximum_scale
+        report["maximumHeadingPx"] = label_size(root, "Sunucuya bağlan")
+        capture("07-maximum-font-entry", data)
+        tap(root, "Demoyu incele")
+        root, data = wait_ui(["Örnek veriler", "Gerçek hesaplara dön", "ETKİLEŞİMLİ DEMO"])
+        tap(root, "Gerçek hesaplara dön")
+        root, data = wait_ui(["Sunucu hesapları", "Sunucuya bağlan"])
+        report["checks"].append("account heading and demo/return controls remain reachable at font scale 2.0")
+        root, data = scroll_to_label("Giriş yap", display)
+        capture("08-maximum-font-form-bottom", data)
+        report["checks"].append("maximum-font account form scrolls to login control without submitting it")
         report["status"] = "passed"
     except Exception as error:
         report["status"] = "failed"
