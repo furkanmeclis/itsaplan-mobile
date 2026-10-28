@@ -1,0 +1,37 @@
+name: Design preview
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: design-preview-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  package:
+    name: Package offline HTML preview
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check preview files
+        run: |
+          test -s design/tasarim-secimi.html
+          test -s design/preview-tasks.png
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mobile-design-preview
+          path: design/
+          if-no-files-found: error
+          retention-days: 14
+      - name: Write build summary
+        run: |
+          echo '### Mobile design preview' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Download mobile-design-preview, unzip, and open tasarim-secimi.html in a browser.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Three interactive design directions. Offline sample data. Native builds follow design approval.' >> "$GITHUB_STEP_SUMMARY"

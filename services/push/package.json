@@ -1,0 +1,15 @@
+{
+  "name": "@itsaplan-mobile/push",
+  "version": "0.1.0",
+  "private": true,
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "node --import tsx --test --test-isolation=none tests/*.test.ts",
+    "gateway": "node --import tsx src/gateway-main.ts",
+    "gateway:worker": "node --import tsx src/gateway-worker-main.ts"
+  },
+  "dependencies": { "postgres": "3.4.9" },
+  "devDependencies": { "@types/node": "^24.0.0", "tsx": "^4.21.0", "typescript": "~6.0.3" }
+}

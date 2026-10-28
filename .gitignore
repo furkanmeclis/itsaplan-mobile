@@ -10,3 +10,12 @@ dist/
 *.p12
 *.mobileprovision
 test-results/
+android/
+ios/
+*.tsbuildinfo
+.expo-shared/
+
+# Push credentials are mounted outside the source tree.
+secrets/
+*.p8
+google-services.json

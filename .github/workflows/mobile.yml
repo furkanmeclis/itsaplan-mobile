@@ -1,0 +1,179 @@
+name: Mobile
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mobile-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Clean install, isolation tests, and platform bundles
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npx expo install --check
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm ci --prefix services/push
+      - run: npm run typecheck --prefix services/push
+      - run: npm test --prefix services/push
+      - run: npm run bundle:android
+      - run: npm run bundle:ios
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mobile-platform-bundles
+          path: dist/
+          if-no-files-found: error
+          retention-days: 14
+
+  upstream:
+    name: Real upstream HTTPS accounts, API and push queue
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: croffasia/itsaplan
+          ref: 73aadf9945ec4c8a23c749fb4f4dee25b036acb3
+          path: .upstream
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm ci --prefix services/push
+      - name: Install pinned upstream Bun runtime
+        run: npm install --prefix "$RUNNER_TEMP/ipm-tools" bun@1.4.3 --no-audit --no-fund
+      - name: Install upstream dependencies from lockfile
+        working-directory: .upstream
+        run: '"$RUNNER_TEMP/ipm-tools/node_modules/.bin/bun" install --frozen-lockfile'
+      - name: Verify two HTTPS servers, independent accounts, tasks, comments and logout
+        run: node integration/run.mjs
+        env:
+          UPSTREAM_ROOT: ${{ github.workspace }}/.upstream
+          BUN_BINARY: ${{ runner.temp }}/ipm-tools/node_modules/.bin/bun
+          UPSTREAM_DB_URL: postgres://postgres@127.0.0.1:5432/postgres
+
+  android:
+    name: Android debug and standalone APKs
+    needs: [validate, upstream]
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      CI: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: |
+            17
+            21
+      - uses: android-actions/setup-android@v3
+        with:
+          cmdline-tools-version: '16111833'
+          packages: platform-tools
+      - name: Install SDK toolchain required by React Native 0.88
+        run: sdkmanager 'platforms;android-37.0' 'build-tools;37.0.0' 'ndk;27.1.12297006'
+      - run: npm ci
+      - run: npx expo prebuild --platform android --no-install
+      - name: Build debug APK for device and emulator
+        working-directory: android
+        run: ./gradlew assembleDebug -PreactNativeArchitectures=arm64-v8a,x86_64 -Porg.gradle.java.installations.fromEnv=JAVA_HOME_17_X64,JAVA_HOME_21_X64 --max-workers=2 --stacktrace
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mobile-android-debug-apk
+          path: android/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Build standalone preview for an Android device
+        working-directory: android
+        run: ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a -Porg.gradle.java.installations.fromEnv=JAVA_HOME_17_X64,JAVA_HOME_21_X64 --max-workers=2 --stacktrace
+      - name: Verify JavaScript is embedded in the preview APK
+        run: |
+          python3 - <<'PY'
+          import zipfile
+          with zipfile.ZipFile('android/app/build/outputs/apk/release/app-release.apk') as apk:
+              assert apk.getinfo('assets/index.android.bundle').file_size > 0
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mobile-android-standalone-preview
+          path: android/app/build/outputs/apk/release/*.apk
+          if-no-files-found: error
+          retention-days: 14
+
+  ios:
+    name: iOS simulator application
+    needs: [validate, upstream]
+    runs-on: macos-26
+    timeout-minutes: 60
+    env:
+      CI: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Record native toolchain
+        run: xcodebuild -version
+      - run: npm ci
+      - run: npx expo prebuild --platform ios --no-install
+      - name: Install CocoaPods dependencies
+        working-directory: ios
+        run: pod install
+      - name: Build unsigned simulator application
+        shell: bash
+        run: |
+          set -euo pipefail
+          workspace=$(find ios -maxdepth 1 -name '*.xcworkspace' -print -quit)
+          test -n "$workspace"
+          scheme=$(basename "$workspace" .xcworkspace)
+          xcodebuild -workspace "$workspace" -scheme "$scheme" \
+            -configuration Debug -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath ios/build -jobs 3 CODE_SIGNING_ALLOWED=NO
+          mkdir -p dist/native
+          ditto -c -k --sequesterRsrc --keepParent \
+            "ios/build/Build/Products/Debug-iphonesimulator/$scheme.app" \
+            dist/native/itsaplan-ios-simulator.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mobile-ios-simulator-app
+          path: dist/native/itsaplan-ios-simulator.zip
+          if-no-files-found: error
+          retention-days: 14
