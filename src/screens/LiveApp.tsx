@@ -120,7 +120,7 @@ export function LiveApp() {
     <Host colorScheme="light" seedColor={colors.primary} style={{ flex: 1, backgroundColor: colors.background }}>
       <ScrollView style={{ width: '100%', height: '100%' }}><Stack spacing={20} style={{ width: '100%', padding: 24 }}>
         <Title>It’s a Plan</Title><Caption>Self-host sunucuların · Hesapların birbirinden ayrı tutulur.</Caption>
-        <Row spacing={8}>{(['Projeler', 'Bildirimler', 'Hesaplar'] as Tab[]).map((value) => <Button key={value} label={value} variant={tab === value ? 'filled' : 'outlined'} onPress={() => { navigation.current++; setTab(value); setSelection(null); setListing(null); setNotice(''); }} />)}</Row>
+        <ScrollView direction="horizontal" style={{ width: '100%' }}><Row spacing={8}>{(['Projeler', 'Bildirimler', 'Hesaplar'] as Tab[]).map((value) => <Button key={value} label={value} variant={tab === value ? 'filled' : 'outlined'} onPress={() => { navigation.current++; setTab(value); setSelection(null); setListing(null); setNotice(''); }} />)}</Row></ScrollView>
         {pending.size > 0 && <Caption>İşlem sürüyor…</Caption>}
         {notice && <Text textStyle={{ color: colors.danger }}>{notice}</Text>}
         {restoring && <Caption>Hesaplar yükleniyor…</Caption>}

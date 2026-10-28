@@ -79,7 +79,7 @@ jobs:
           UPSTREAM_DB_URL: postgres://postgres@127.0.0.1:5432/postgres
 
   android:
-    name: Android debug APK
+    name: Android debug and standalone APKs
     needs: [validate, upstream]
     runs-on: ubuntu-latest
     timeout-minutes: 60
@@ -112,6 +112,23 @@ jobs:
         with:
           name: mobile-android-debug-apk
           path: android/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Build standalone preview for an Android device
+        working-directory: android
+        run: ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a -Porg.gradle.java.installations.fromEnv=JAVA_HOME_17_X64,JAVA_HOME_21_X64 --max-workers=2 --stacktrace
+      - name: Verify JavaScript is embedded in the preview APK
+        run: |
+          python3 - <<'PY'
+          import zipfile
+          with zipfile.ZipFile('android/app/build/outputs/apk/release/app-release.apk') as apk:
+              assert apk.getinfo('assets/index.android.bundle').file_size > 0
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mobile-android-standalone-preview
+          path: android/app/build/outputs/apk/release/*.apk
           if-no-files-found: error
           retention-days: 14
 

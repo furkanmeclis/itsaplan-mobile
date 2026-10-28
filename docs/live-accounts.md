@@ -90,7 +90,8 @@ compilation and source inspection, not physical-device execution.
 
 The `Mobile` workflow includes this upstream test. Android and iOS native jobs
 depend on both the client validation and real upstream test jobs. Downloaded
-debug artifacts require Metro. A green build does not complete real-device auth
+debug artifacts require Metro; the Android standalone preview embeds its bundle.
+See [physical-device testing](device-testing.md). A green build does not complete real-device auth
 or push acceptance. No operator-owned production server was accessed.
 
 It’s a Plan MCP remains unavailable in this session. These files document code
