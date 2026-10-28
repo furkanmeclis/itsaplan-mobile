@@ -78,5 +78,5 @@ test('malformed notification timestamps fail closed and unknown types have a usa
   const client = new PlannerClient(async () => Response.json(page({ ...old, createdAt: 'not-a-date' })));
   await assert.rejects(client.inbox(a, { cookie: '__Host-better-auth.session_token=test' }), (error: unknown) => error instanceof ApiError && error.code === 'invalid-response');
   assert.equal(notificationLabel('assigned'), 'Sana atandı');
-  assert.equal(notificationLabel('future-event'), 'Yeni bildirim');
+  for (const type of ['future-event', '__proto__', 'toString']) assert.equal(notificationLabel(type), 'Yeni bildirim');
 });

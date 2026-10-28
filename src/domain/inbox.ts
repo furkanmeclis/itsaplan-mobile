@@ -30,6 +30,12 @@ export function acknowledgeRead(current: Page<InboxItem>, id: number, read: bool
 }
 
 export function notificationLabel(type: string): string {
-  return ({ assigned: 'Sana atandı', mentioned: 'Senden bahsedildi', commented: 'Yeni yorum', state_changed: 'Durum değişti' } as Record<string, string>)[type] ?? 'Yeni bildirim';
+  switch (type) {
+    case 'assigned': return 'Sana atandı';
+    case 'mentioned': return 'Senden bahsedildi';
+    case 'commented': return 'Yeni yorum';
+    case 'state_changed': return 'Durum değişti';
+    default: return 'Yeni bildirim';
+  }
 }
 
