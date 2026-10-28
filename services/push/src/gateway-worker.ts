@@ -1,13 +1,17 @@
 import type { Database } from './database';
 import { decrypt } from './security';
-import { payload, retryDelay, type Provider, type PushPayload } from './protocol';
+import { MAX_DELIVERY_ATTEMPTS, payload, retryDelay, type Provider, type PushPayload } from './protocol';
 
 export interface SendResult { status: 'sent' | 'retry' | 'retired' | 'failed'; code?: string; retryAfterMs?: number }
 export type Sender = (provider: Provider, token: string, payload: PushPayload, id: string) => Promise<SendResult>;
 
 export async function gatewayTick(sql: Database, key: Buffer, send: Sender): Promise<void> {
+  await sql`UPDATE push_delivery SET status='failed',lease_token=NULL,last_error='attempts_exhausted'
+    WHERE (tenant_id,id) IN (SELECT tenant_id,id FROM push_delivery WHERE status='pending'
+      AND attempts>=${MAX_DELIVERY_ATTEMPTS} AND next_attempt_at<=now()
+      ORDER BY next_attempt_at,id FOR UPDATE SKIP LOCKED LIMIT 100)`;
   const claimed = await sql`UPDATE push_delivery d SET attempts=d.attempts+1,next_attempt_at=now()+interval '120 seconds',lease_token=gen_random_uuid()
-    WHERE (d.tenant_id,d.id) IN (SELECT tenant_id,id FROM push_delivery WHERE status='pending' AND next_attempt_at<=now() ORDER BY next_attempt_at,id FOR UPDATE SKIP LOCKED LIMIT 10)
+    WHERE (d.tenant_id,d.id) IN (SELECT tenant_id,id FROM push_delivery WHERE status='pending' AND attempts<${MAX_DELIVERY_ATTEMPTS} AND next_attempt_at<=now() ORDER BY next_attempt_at,id FOR UPDATE SKIP LOCKED LIMIT 10)
     RETURNING *`;
   await Promise.all(claimed.map(async (delivery) => {
     await sql.begin(async (tx) => {
@@ -20,7 +24,7 @@ export async function gatewayTick(sql: Database, key: Buffer, send: Sender): Pro
       let result: SendResult;
       try { result = await send(device.provider, decrypt(device.token_encrypted, key, `${device.tenant_id}:${device.id}`), payload(device.route_id, delivery.notification_id), delivery.id); }
       catch { result = { status: 'retry', code: 'provider_unavailable' }; }
-      const retry = result.status === 'retry' && delivery.attempts < 8;
+      const retry = result.status === 'retry' && delivery.attempts < MAX_DELIVERY_ATTEMPTS;
       const status = retry ? 'pending' : result.status === 'retry' ? 'failed' : result.status;
       const delay = Math.max(retryDelay(delivery.attempts), Math.min(result.retryAfterMs ?? 0, 86400000));
       // Provider bodies and token values never enter error records.

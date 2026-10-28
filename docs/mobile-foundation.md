@@ -123,8 +123,8 @@ at system font scales 1.3 and 2.0. At 2.0 it also exercises demo/return navigati
 and scrolls the form to its login control without pressing it. A separate check
 types only `https://mobile.invalid`, verifies the software keyboard is shown,
 and dismisses it with Back while preserving the field. The editable field must
-remain above the current keyboard window frame. Current window visibility is
-used instead of historical IME show flags. No login is submitted.
+remain above the current keyboard window frame. Current window visibility and content insets exclude the IME window’s
+transparent region; historical IME show flags are not used. No login is submitted.
 Each hierarchy dump removes the previous file first;
 font-scale evidence must expose larger text width and height, and regression tests prevent
 stale UI labels from being accepted after a failed dump. `mobile-android-ui-evidence` contains PNG screenshots,
