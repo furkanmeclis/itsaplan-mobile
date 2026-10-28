@@ -132,6 +132,14 @@ def keyboard_frame():
         if bounds is None:
             raise AssertionError("Visible keyboard has no window frame")
         frame = tuple(map(int, bounds.groups()))
+        insets = re.search(r"\bmGivenContentInsets=\[(-?\d+),(-?\d+)\]\[(-?\d+),(-?\d+)\]", section)
+        if insets is None:
+            raise AssertionError("Visible keyboard has no content insets")
+        left, top, right, bottom = map(int, insets.groups())
+        if min(left, top, right, bottom) < 0:
+            raise AssertionError("Keyboard content insets are invalid")
+        # IME windows include a transparent region above the visible keyboard.
+        frame = (frame[0] + left, frame[1] + top, frame[2] - right, frame[3] - bottom)
         if frame[2] <= frame[0] or frame[3] <= frame[1]:
             raise AssertionError("Visible keyboard has empty window frame")
         return frame

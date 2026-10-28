@@ -105,10 +105,23 @@ class FormEvidence(unittest.TestCase):
         for visible in [True, False]:
             state = ("WINDOW MANAGER WINDOWS\n  Window #0 Window{abc u0 App}:\n"
                      "    isVisible=true\n  Window #1 Window{def u0 InputMethod}:\n"
+                     "    mGivenContentInsets=[0,0][0,0]\n"
                      "    Frames: parent=[0,0][320,640] frame=[0,380][320,640]\n"
                      f"    isVisible={str(visible).lower()}\n    mInputShown=true\n").encode()
             with self.subTest(visible=visible), patch.object(smoke, "adb", return_value=state):
                 self.assertEqual(smoke.keyboard_frame(), (0, 380, 320, 640) if visible else None)
+
+    def test_transparent_ime_region_is_excluded_using_recorded_android_15_insets(self):
+        state = b"""WINDOW MANAGER WINDOWS
+  Window #0 Window{def u0 InputMethod}:
+    mGivenContentInsets=[0,357][0,0] mGivenVisibleInsets=[0,357][0,0]
+    Frames: parent=[0,24][320,640] frame=[0,24][320,640]
+    isVisible=true
+"""
+        root = ET.fromstring('<hierarchy><node text="https://mobile.invalid" bounds="[61,325][259,357]"/></hierarchy>')
+        with patch.object(smoke, "adb", return_value=state):
+            self.assertEqual(smoke.keyboard_frame(), (0, 381, 320, 640))
+            self.assertTrue(smoke.input_above_keyboard(root, "https://mobile.invalid", (320, 640)))
 
     def test_unrecognized_window_dump_cannot_prove_keyboard_dismissal(self):
         with patch.object(smoke, "adb", return_value=b"mInputShown=true"):
