@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { BackHandler } from 'react-native';
+import { AppState, BackHandler } from 'react-native';
 import { Host, ScrollView, Column as Stack, Row, Text, Button, TextInput } from '@expo/ui';
 import { StatusBar } from 'expo-status-bar';
 import { accountKey, resourceKey } from '../domain/accounts';
+import { acknowledgeRead, appendInboxPage, mergeInbox, notificationLabel } from '../domain/inbox';
 import { plannerClient } from '../api/nativeClient';
 import { connectedAccounts } from '../storage/connectedAccounts';
 import { ApiError, type ConnectedAccount, type Project, type Issue, type IssueSummary, type Column, type Comment, type Page, type InboxItem } from '../api/client';
@@ -39,11 +40,18 @@ export function LiveApp() {
   const [listing, setListing] = useState<{ account: ConnectedAccount; project: Project; issues: IssueSummary[] } | null>(null);
   const [comment, setComment] = useState('');
   const [commentVersion, setCommentVersion] = useState(0);
+  const [unreadOnly, setUnreadOnly] = useState(false);
   const requests = useRef(new Map<string, AbortController>());
   const alive = useRef(true);
   const navigation = useRef(0);
   const busyFor = (account?: ConnectedAccount) => pending.has(account ? accountKey(account) : 'login');
   const busy = busyFor(selection?.account ?? listing?.account);
+  const inboxSources = accounts.flatMap((account) => {
+    const page = snapshots.get(accountKey(account))?.inbox;
+    return page ? [{ account, page }] : [];
+  });
+  const inboxEntries = mergeInbox(inboxSources, unreadOnly);
+  const loadedUnread = mergeInbox(inboxSources, true).length;
 
   useEffect(() => {
     alive.current = true;
@@ -57,6 +65,16 @@ export function LiveApp() {
   }, []);
 
   useEffect(() => {
+    let previous = AppState.currentState;
+    const listener = AppState.addEventListener('change', (state) => {
+      const resumed = state === 'active' && previous !== 'active';
+      previous = state;
+      if (resumed) for (const account of accounts) void refresh(account);
+    });
+    return () => listener.remove();
+  }, [accounts]);
+
+  useEffect(() => {
     const listener = BackHandler.addEventListener('hardwareBackPress', () => {
       if (!selection && !listing) return false;
       navigation.current++;
@@ -67,8 +85,17 @@ export function LiveApp() {
     return () => listener.remove();
   }, [selection, listing]);
 
+  function expireAccount(account: ConnectedAccount) {
+    const key = accountKey(account);
+    requests.current.get(key)?.abort();
+    setSnapshots((current) => new Map(current).set(key, { status: 'expired', projects: [] }));
+    setSelection((current) => current && accountKey(current.account) === key ? null : current);
+    setListing((current) => current && accountKey(current.account) === key ? null : current);
+  }
+
   async function refresh(account: ConnectedAccount) {
     const key = accountKey(account);
+    if (pendingRef.current.has(key)) return;
     requests.current.get(key)?.abort();
     const controller = new AbortController();
     requests.current.set(key, controller);
@@ -84,19 +111,26 @@ export function LiveApp() {
       setSnapshots((previous) => new Map(previous).set(key, { status: 'ready', projects, inbox }));
     } catch (error) {
       if (!alive.current || controller.signal.aborted) return;
+      if (error instanceof ApiError && error.code === 'expired') { expireAccount(account); return; }
       setSnapshots((previous) => {
         const next = new Map(previous); const entry = next.get(key);
-        next.set(key, { status: error instanceof ApiError && error.code === 'expired' ? 'expired' : 'unavailable', projects: entry?.projects ?? [] });
+        next.set(key, { status: 'unavailable', projects: entry?.projects ?? [] });
         return next;
       });
     }
   }
 
-  async function act(work: () => Promise<void>, account = selection?.account ?? listing?.account) {
+  async function act(work: () => Promise<unknown>, account = selection?.account ?? listing?.account) {
     const key = account ? accountKey(account) : 'login';
     if (pendingRef.current.has(key)) return;
     pendingRef.current.add(key); setPending(new Set(pendingRef.current)); setNotice('');
-    try { await work(); } catch (error) { if (alive.current) setNotice(`${account?.label ?? 'Giriş'}: ${errorText(error)}`); }
+    try { await work(); } catch (error) {
+      if (!alive.current) return;
+      if (account && error instanceof ApiError && error.code === 'expired') {
+        expireAccount(account);
+      }
+      setNotice(`${account?.label ?? 'Giriş'}: ${errorText(error)}`);
+    }
     finally { pendingRef.current.delete(key); if (alive.current) setPending(new Set(pendingRef.current)); }
   }
   async function openProject(account: ConnectedAccount, project: Project) {
@@ -112,7 +146,34 @@ export function LiveApp() {
     const resolvedProject = project ?? snapshots.get(accountKey(account))?.projects.find((item) => item.id === issue.projectId);
     if (!resolvedProject || resolvedProject.id !== issue.projectId) throw new ApiError('forbidden');
     const [columns, comments] = await Promise.all([plannerClient.columns(account, credential, resolvedProject), plannerClient.comments(account, credential, issue.id)]);
-    if (alive.current && navigation.current === version) { setSelection({ account, issue, columns, comments }); setComment(''); setCommentVersion((value) => value + 1); }
+    if (alive.current && navigation.current === version) { setSelection({ account, issue, columns, comments }); setComment(''); setCommentVersion((value) => value + 1); return true; }
+    return false;
+  }
+
+  async function setRead(account: ConnectedAccount, id: number, read: boolean) {
+    const key = accountKey(account);
+    const request = requests.current.get(key);
+    const credential = await connectedAccounts.credential(account);
+    await plannerClient.setNotificationRead(account, credential, id, read);
+    if (!alive.current || request !== requests.current.get(key) || request?.signal.aborted) return;
+    setSnapshots((current) => {
+      const entry = current.get(key);
+      return entry?.inbox ? new Map(current).set(key, { ...entry, inbox: acknowledgeRead(entry.inbox, id, read, new Date().toISOString()) }) : current;
+    });
+  }
+
+  async function moreInbox(account: ConnectedAccount) {
+    const key = accountKey(account);
+    const page = snapshots.get(key)?.inbox;
+    if (page?.nextCursor == null) return;
+    const request = requests.current.get(key);
+    const credential = await connectedAccounts.credential(account);
+    const next = await plannerClient.inbox(account, credential, page.nextCursor);
+    if (!alive.current || request !== requests.current.get(key) || request?.signal.aborted) return;
+    setSnapshots((current) => {
+      const entry = current.get(key);
+      return entry?.inbox ? new Map(current).set(key, { ...entry, inbox: appendInboxPage(entry.inbox, next) }) : current;
+    });
   }
 
   return <>
@@ -161,19 +222,10 @@ export function LiveApp() {
             return <Card key={accountKey(account)}>
               <Title>{account.label}</Title><Caption>{account.server}</Caption>
               <Caption>{snapshot?.status === 'ready' ? 'Bağlı' : snapshot?.status === 'expired' ? 'Yeniden giriş gerekli' : snapshot?.status === 'unavailable' ? 'Bu sunucuya erişilemiyor' : 'Bağlanıyor…'}</Caption>
-              <Button label="Yenile" variant="text" onPress={() => void refresh(account)} />
+              <Button label="Yenile" variant="text" disabled={busyFor(account)} onPress={() => void refresh(account)} />
               {tab === 'Projeler' && snapshot?.projects.map((project) => <Button key={project.ref} label={project.name} variant="outlined" disabled={busyFor(account)} onPress={() => void act(() => openProject(account, project), account)} />)}
               {tab === 'Projeler' && snapshot?.status === 'ready' && snapshot.projects.length === 0 && <Caption>Henüz erişilebilir proje yok.</Caption>}
-              {tab === 'Bildirimler' && snapshot?.inbox?.items.map((item) => <Stack key={resourceKey(account, 'notification', item.id)} spacing={8}>
-                <Caption>{`${item.projectName} · ${item.type}`}</Caption>
-                <Text textStyle={{ color: colors.text }}>{item.issueTitle ?? 'Belge bildirimi'}</Text>
-                {item.issueId !== null ? <Button label="Kaynak görevi aç" disabled={busyFor(account)} onPress={() => void act(() => openIssue(account, item.issueId!), account)} /> : <Caption>Belge görüntüleme bu sürümde desteklenmiyor.</Caption>}
-              </Stack>)}
-              {tab === 'Bildirimler' && snapshot?.inbox?.nextCursor != null && <Button label="Daha fazla bildirim" disabled={busyFor(account)} onPress={() => void act(async () => {
-                const credential = await connectedAccounts.credential(account);
-                const next = await plannerClient.inbox(account, credential, snapshot.inbox!.nextCursor);
-                if (alive.current) setSnapshots((current) => { const value = current.get(accountKey(account)); return value?.inbox ? new Map(current).set(accountKey(account), { ...value, inbox: { items: [...value.inbox.items, ...next.items], nextCursor: next.nextCursor } }) : current; });
-              }, account)} />}
+              {tab === 'Bildirimler' && snapshot?.inbox?.nextCursor != null && <Button label={`${account.label}: daha fazla yükle`} disabled={busyFor(account)} onPress={() => void act(() => moreInbox(account), account)} />}
               {tab === 'Bildirimler' && snapshot?.inbox?.items.length === 0 && <Caption>Bildirim yok.</Caption>}
               {tab === 'Hesaplar' && <>
                 <Caption>Push ve cihaz kaydı henüz bağlı değil. Çıkış, bu hesabın sunucu oturumunu kapatır.</Caption>
@@ -185,6 +237,23 @@ export function LiveApp() {
               </>}
             </Card>;
           })}
+          {tab === 'Bildirimler' && <>
+            <Title>Ortak bildirim kutusu</Title>
+            <Caption>{`Yüklenenlerde ${loadedUnread} okunmamış · Yüklenen bildirimler en yeniden eskiye sıralanır.`}</Caption>
+            <Button label={unreadOnly ? 'Tüm yüklenenleri göster' : 'Yalnızca okunmamışlar'} variant="outlined" onPress={() => setUnreadOnly((value) => !value)} />
+            {inboxEntries.length === 0 && <Caption>{unreadOnly ? 'Yüklenenlerde okunmamış bildirim yok.' : 'Henüz yüklenmiş bildirim yok.'}</Caption>}
+            {inboxEntries.map(({ account, item, key }) => <Card key={key}>
+              <Caption>{`${account.label} · ${account.server}`}</Caption>
+              <Caption>{`${item.projectName} · ${notificationLabel(item.type)} · ${new Date(item.createdAt).toLocaleString('tr-TR')}`}</Caption>
+              <Text textStyle={{ color: colors.text, fontSize: 18, fontWeight: item.readAt === null ? '700' : 'normal' }}>{item.issueTitle ?? item.documentTitle ?? 'Bildirim'}</Text>
+              <Caption>{item.readAt === null ? 'Okunmadı' : 'Okundu'}</Caption>
+              {item.issueId !== null ? <Button label="Kaynak görevi aç" disabled={busyFor(account)} onPress={() => void act(async () => {
+                const opened = await openIssue(account, item.issueId!);
+                if (opened && item.readAt === null) await setRead(account, item.id, true);
+              }, account)} /> : <Caption>Belge görüntüleme bu sürümde desteklenmiyor.</Caption>}
+              <Button label={item.readAt === null ? 'Okundu işaretle' : 'Okunmadı işaretle'} variant="outlined" disabled={busyFor(account)} onPress={() => void act(() => setRead(account, item.id, item.readAt === null), account)} />
+            </Card>)}
+          </>}
           {(tab === 'Hesaplar' || (!restoring && accounts.length === 0)) && <LoginForm busy={busy} onLogin={(server, origin, identifier, password) => act(async () => {
             const account = await connectedAccounts.signIn(server, origin, identifier, password);
             if (!alive.current) return;

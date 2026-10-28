@@ -47,6 +47,8 @@ as external phone test servers.
 2. Open projects, an assigned task, change a state and post a distinctive test
    comment. Confirm the mutation on the corresponding server's web UI.
 3. Open a notification from each source and confirm the correct account/task.
+   Verify the combined list's order, unread filter and read/unread controls. On
+   the web UI, confirm that the change affected only the originating account.
 4. Force-close and reopen the app; confirm each account still resolves to the
    correct `/me` user without entering a password again.
 5. Make one server unreachable and verify another account still loads and opens

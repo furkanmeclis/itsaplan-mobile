@@ -6,7 +6,7 @@ export interface Project { id: number; ref: string; name: string }
 export interface Issue { id: number; projectId: number; identifier: string; title: string; description: string; columnId: number }
 export type IssueSummary = Omit<Issue, 'description'>;
 export interface Column { id: number; name: string; stateType: string }
-export interface InboxItem { id: number; projectId: number; projectName: string; issueId: number | null; issueTitle: string | null; type: string; readAt: string | null }
+export interface InboxItem { id: number; projectId: number; projectName: string; issueId: number | null; issueTitle: string | null; documentTitle: string | null; type: string; readAt: string | null; createdAt: string }
 export interface Comment { id: number; body: string | null; actorName: string | null }
 export interface Page<T> { items: T[]; nextCursor: unknown }
 export interface Credential { cookie: string }
@@ -39,6 +39,11 @@ function list<T>(value: unknown, parse: (value: unknown) => T): T[] {
   return value.map(parse);
 }
 function nullableString(value: unknown): string | null { return value === null ? null : string(value); }
+function timestamp(value: unknown): string {
+  const result = string(value);
+  if (!Number.isFinite(Date.parse(result))) throw new ApiError('invalid-response');
+  return result;
+}
 export function parseUser(value: unknown): User {
   const item = object(value);
   const user = { id: string(item.id), name: string(item.name), email: string(item.email) };
@@ -55,7 +60,7 @@ function parseIssue(value: unknown): Issue {
 }
 function parseInbox(value: unknown): InboxItem {
   const item = object(value);
-  return { id: number(item.id), projectId: number(item.projectId), projectName: string(item.projectName), issueId: item.issueId === null ? null : number(item.issueId), issueTitle: nullableString(item.issueTitle), type: string(item.type), readAt: nullableString(item.readAt) };
+  return { id: number(item.id), projectId: number(item.projectId), projectName: string(item.projectName), issueId: item.issueId === null ? null : number(item.issueId), issueTitle: nullableString(item.issueTitle), documentTitle: nullableString(item.documentTitle), type: string(item.type), readAt: item.readAt === null ? null : timestamp(item.readAt), createdAt: timestamp(item.createdAt) };
 }
 function parsePage<T>(value: unknown, parse: (value: unknown) => T): Page<T> {
   const item = object(value);
@@ -195,6 +200,9 @@ export class PlannerClient {
     const query = new URLSearchParams({ limit: '50' });
     if (cursor != null) query.set('cursor', JSON.stringify(cursor));
     return parsePage((await this.request(account.server, `/notifications?${query}`, { credential, signal })).value, parseInbox);
+  }
+  async setNotificationRead(account: ConnectedAccount, credential: Credential, id: number, read: boolean): Promise<void> {
+    await this.request(account.server, `/notifications/${number(id)}/read`, { method: 'POST', credential, body: { read } });
   }
   async signOut(account: ConnectedAccount, credential: Credential): Promise<void> {
     await this.request(account.server, '/api/auth/sign-out', { method: 'POST', credential, webOrigin: account.webOrigin, body: {} });

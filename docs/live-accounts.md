@@ -44,6 +44,8 @@ Project/inbox snapshots and navigation include the account key. Background reads
 are independently bounded and canceled on refresh/removal. Available accounts
 do not wait for another account's refresh. Late navigation results are discarded.
 Request/mutation busy states are account-scoped.
+Returning to the foreground refreshes available accounts independently. Expired
+sessions clear only that account's loaded views and prompt reauthentication.
 
 ## Implemented API views
 
@@ -51,17 +53,23 @@ Request/mutation busy states are account-scoped.
 - Tasks assigned to that account, scoped to a selected project (the API's maximum
   500 results is stated in the UI).
 - Task detail, available server states, state change and comments.
-- Account-grouped inbox with source account, cursor pagination and task routing.
+- Combined inbox sorted by server timestamps, with source account, unread filter,
+  cursor pagination and task routing. Read/unread changes are saved to the source
+  server. Opening a task marks its notification read only after the task opens.
   Document notifications are identified as unsupported instead of opening an
   unrelated task. Comment feeds have cursor pagination.
 
+The inbox count covers loaded notifications. Each account retains its own cursor;
+unloaded pages and unavailable accounts are not counted as read or empty. Overlap
+between pages is deduplicated without undoing acknowledged read changes.
+
 Descriptions and comment bodies are displayed as text. Rich document/Markdown
-rendering, a globally sorted inbox, marking read, offline data persistence, push
+rendering, offline data persistence, push
 preferences and APNs/FCM delivery are not part of this change.
 
 ## Validation
 
-`npm test` runs 26 domain and transport tests. The actual upstream wire contract
+`npm test` runs 34 domain and transport tests. The actual upstream wire contract
 has a separate test against two independently migrated PostgreSQL databases and
 two real Elysia/better-auth HTTPS servers, pinned to upstream commit
 `73aadf9945ec4c8a23c749fb4f4dee25b036acb3` and Bun 1.4.3.
@@ -83,7 +91,10 @@ and lockfiles remain unchanged. Do not point this runner at a production databas
 
 The scenario checks login, two users on one host, equal task IDs on independent
 servers, assigned-task summaries, task details, state updates, comments, inbox and
-single-account logout without invalidating the other sessions. It is one
+single-account logout without invalidating the other sessions. It also generates
+real notifications through project invitations and comments on both servers,
+verifies correct routing for equal notification/task IDs, read/unread isolation,
+rejection of changes to another user's notification, and cursor pagination. It is one
 end-to-end test with multiple assertions. It uses the same client/domain code and
 standard Node fetch; Expo's native fetch adapter and SecureStore are verified by
 compilation and source inspection, not physical-device execution.

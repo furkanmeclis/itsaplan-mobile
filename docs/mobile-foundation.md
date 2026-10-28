@@ -2,7 +2,7 @@
 
 The demo and foundation checks below remain available. The default app now uses
 [live account screens](live-accounts.md); that guide describes real API behavior,
-the 26 current unit tests and the additional two-server upstream integration job.
+the 34 current unit tests and the additional two-server upstream integration job.
 
 The application uses Expo 58.0.20, React Native 0.88.0, React 19.3.0,
 TypeScript 6 and the root universal API of `@expo/ui` 58.0.24. One component
