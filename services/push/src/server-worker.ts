@@ -1,10 +1,15 @@
 import type { Database } from './database';
 import { GatewayClient } from './gateway-client';
-import { HttpError, retryDelay, type Event } from './protocol';
+import { HttpError, MAX_DELIVERY_ATTEMPTS, retryDelay, type Event } from './protocol';
 
 export async function mobileTick(sql: Database, gateway: GatewayClient, canRead: (userId: string, projectId: number) => Promise<boolean>): Promise<void> {
+  // A process may die after claiming its final attempt but before recording a result.
+  // Preserve live leases; settle only expired, exhausted work without another send.
+  await sql`UPDATE mobile_delivery SET status='failed',lease_token=NULL,last_error='attempts_exhausted'
+    WHERE id IN (SELECT id FROM mobile_delivery WHERE status='pending' AND attempts>=${MAX_DELIVERY_ATTEMPTS}
+      AND next_attempt_at<=now() ORDER BY next_attempt_at,id FOR UPDATE SKIP LOCKED LIMIT 100)`;
   const claimed = await sql`UPDATE mobile_delivery d SET attempts=d.attempts+1,next_attempt_at=now()+interval '120 seconds',lease_token=gen_random_uuid()
-    WHERE d.id IN (SELECT id FROM mobile_delivery WHERE status='pending' AND next_attempt_at<=now() ORDER BY next_attempt_at,id FOR UPDATE SKIP LOCKED LIMIT 10) RETURNING *`;
+    WHERE d.id IN (SELECT id FROM mobile_delivery WHERE status='pending' AND attempts<${MAX_DELIVERY_ATTEMPTS} AND next_attempt_at<=now() ORDER BY next_attempt_at,id FOR UPDATE SKIP LOCKED LIMIT 10) RETURNING *`;
   await Promise.all(claimed.map(async (delivery) => {
     await sql.begin(async (tx) => {
       const [device] = await tx`SELECT v.*,p.enabled,p.events,u.active AS user_active FROM mobile_device v
@@ -20,7 +25,7 @@ export async function mobileTick(sql: Database, gateway: GatewayClient, canRead:
         await tx`UPDATE mobile_delivery SET status='accepted',lease_token=NULL,last_error=NULL WHERE id=${delivery.id} AND lease_token=${delivery.lease_token}`;
       } catch (error) {
         const retired = error instanceof HttpError && error.status === 410;
-        const retry = !retired && error instanceof HttpError && error.status === 503 && delivery.attempts < 8;
+        const retry = !retired && error instanceof HttpError && error.status === 503 && delivery.attempts < MAX_DELIVERY_ATTEMPTS;
         const status = retired ? 'retired' : retry ? 'pending' : 'failed';
         const delay = retryDelay(delivery.attempts);
         await tx`UPDATE mobile_delivery SET status=${status},next_attempt_at=now()+${delay}*interval '1 millisecond',last_error=${retired ? 'device_retired' : 'gateway_delivery_failed'},lease_token=NULL WHERE id=${delivery.id} AND lease_token=${delivery.lease_token}`;

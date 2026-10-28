@@ -146,6 +146,42 @@ test('upstream event → durable mobile queue → gateway → provider boundary,
     await tick('https://localhost:34563', '/__test/tick');
     assert.equal((await gatewayDb`SELECT count(*)::int AS count FROM push_test_sent`)[0].count, beforeLostResponseLogout);
     assert.equal((await sqlA`SELECT active FROM mobile_device WHERE id=${aDevice.deviceId}`)[0].active, false);
+    // Crash recovery: an unexpired final lease is untouched; an expired one
+    // becomes terminal without a ninth send. Earlier expired leases can recover.
+    await api(a.server, '/mobile/devices', a.owner.cookie, { installationId: installation, provider: 'fcm', token: `crash-recovery-test-${randomUUID()}` });
+    await a.comment();
+    const [crashedMobile] = await sqlA`SELECT id FROM mobile_delivery WHERE device_id=${aDevice.deviceId} AND status='pending' ORDER BY created_at DESC,id DESC LIMIT 1`;
+    await sqlA`UPDATE mobile_delivery SET attempts=8,lease_token=gen_random_uuid(),next_attempt_at=now()+interval '1 hour' WHERE id=${crashedMobile.id}`;
+    await tick(a.server, '/__test/mobile-tick');
+    assert.equal((await sqlA`SELECT status FROM mobile_delivery WHERE id=${crashedMobile.id}`)[0].status, 'pending');
+    await sqlA`UPDATE mobile_delivery SET next_attempt_at=now() WHERE id=${crashedMobile.id}`;
+    await Promise.all([tick(a.server, '/__test/mobile-tick'),tick(a.server, '/__test/mobile-tick')]);
+    const [exhaustedMobile] = await sqlA`SELECT status,attempts,lease_token,last_error FROM mobile_delivery WHERE id=${crashedMobile.id}`;
+    assert.deepEqual({ ...exhaustedMobile }, { status:'failed',attempts:8,lease_token:null,last_error:'attempts_exhausted' });
+    assert.equal((await gatewayDb`SELECT count(*)::int AS n FROM push_delivery WHERE id=${crashedMobile.id}`)[0].n,0);
+
+    await a.comment();
+    const [recoveringMobile] = await sqlA`SELECT id FROM mobile_delivery WHERE device_id=${aDevice.deviceId} AND status='pending' ORDER BY created_at DESC,id DESC LIMIT 1`;
+    await sqlA`UPDATE mobile_delivery SET attempts=7,lease_token=gen_random_uuid(),next_attempt_at=now() WHERE id=${recoveringMobile.id}`;
+    await Promise.all([tick(a.server, '/__test/mobile-tick'),tick(a.server, '/__test/mobile-tick')]);
+    const [recoveredMobile] = await sqlA`SELECT status,attempts FROM mobile_delivery WHERE id=${recoveringMobile.id}`;
+    assert.equal(recoveredMobile.status,'accepted'); assert.equal(recoveredMobile.attempts,8);
+    await gatewayDb`UPDATE push_delivery SET attempts=8,lease_token=gen_random_uuid(),next_attempt_at=now()+interval '1 hour' WHERE id=${recoveringMobile.id}`;
+    await tick('https://localhost:34563','/__test/tick');
+    assert.equal((await gatewayDb`SELECT status FROM push_delivery WHERE id=${recoveringMobile.id}`)[0].status,'pending');
+    await gatewayDb`UPDATE push_delivery SET next_attempt_at=now() WHERE id=${recoveringMobile.id}`;
+    await Promise.all([tick('https://localhost:34563','/__test/tick'),tick('https://localhost:34563','/__test/tick')]);
+    const [exhaustedGateway] = await gatewayDb`SELECT status,attempts,lease_token,last_error FROM push_delivery WHERE id=${recoveringMobile.id}`;
+    assert.deepEqual({ ...exhaustedGateway }, { status:'failed',attempts:8,lease_token:null,last_error:'attempts_exhausted' });
+    assert.equal((await gatewayDb`SELECT count(*)::int AS n FROM push_test_sent WHERE id=${recoveringMobile.id}`)[0].n,0);
+
+    await a.comment(); await tick(a.server,'/__test/mobile-tick');
+    const [recoveringGateway] = await gatewayDb`SELECT id FROM push_delivery WHERE status='pending' LIMIT 1`;
+    await gatewayDb`UPDATE push_delivery SET attempts=7,lease_token=gen_random_uuid(),next_attempt_at=now() WHERE id=${recoveringGateway.id}`;
+    await Promise.all([tick('https://localhost:34563','/__test/tick'),tick('https://localhost:34563','/__test/tick')]);
+    const [recoveredGateway] = await gatewayDb`SELECT status,attempts FROM push_delivery WHERE id=${recoveringGateway.id}`;
+    assert.equal(recoveredGateway.status,'sent'); assert.equal(recoveredGateway.attempts,8);
+    assert.equal((await gatewayDb`SELECT count(*)::int AS n FROM push_test_sent WHERE id=${recoveringGateway.id}`)[0].n,1);
     await b.comment();
     await sqlB`UPDATE "user" SET active=false WHERE id=${b.owner.id}`;
     await tick(b.server, '/__test/mobile-tick');

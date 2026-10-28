@@ -1,3 +1,4 @@
+export const MAX_DELIVERY_ATTEMPTS = 8;
 export const events = ['assigned', 'mentioned', 'commented', 'state_changed'] as const;
 export type Event = typeof events[number];
 export type Provider = 'apns' | 'fcm';
