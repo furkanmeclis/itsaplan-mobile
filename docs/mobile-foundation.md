@@ -117,7 +117,9 @@ holds operator fixtures. It does not replace the IPM process project.
 After native builds, `android-ui` installs the matching debug APK on an Android
 15/API 35 x86_64 emulator and connects it to Metro from the same checkout. It
 checks account entry, labeled demo navigation, return navigation and rendering
-at system font scale 1.3. `mobile-android-ui-evidence` contains PNG screenshots,
+at system font scale 1.3. Each hierarchy dump removes the previous file first;
+font-scale evidence must expose larger text bounds, and regression tests prevent
+stale UI labels from being accepted after a failed dump. `mobile-android-ui-evidence` contains PNG screenshots,
 UI hierarchy XML, a report and fresh-emulator app logs. No live account is enrolled
 and no operator/provider credentials are passed to the job. A passing result is
 emulator UI evidence; it is not physical-device, VoiceOver/TalkBack, mobile auth
