@@ -18,9 +18,11 @@ Every PR references its IPM identifier. The task records PR, CI run, artifact, a
 
 GitHub Projects access was denied by the current integration. The user selected It’s a Plan MCP for process tracking; that permission no longer blocks this workflow. No GitHub Project was created.
 
-## Push implementation evidence (unmerged)
+## Push implementation evidence
 
-PR #1 now includes IPM-14–18 implementation: account event preferences, native
+PR #1 was merged into `main` at `b25f8a9c979c2f4a498e898ff97d26719933bc55`
+with passing native Android/iOS, client and real-upstream CI. It includes
+IPM-14–18 implementation: account event preferences, native
 APNs/FCM registration/revocation, an upstream-inbox transaction outbox, worker
 integration, tenant-isolated gateway and provider adapters. IPM-19 remains
 unverified until real signed Android/iOS devices receive and open notifications.
@@ -32,3 +34,11 @@ The current tool catalog has no It’s a Plan MCP operations, so this session
 cannot update existing task states or evidence fields. No substitute project or
 duplicate tasks were created. PR/CI evidence is retained for attaching to the
 existing IPM records when that connector becomes available.
+
+
+IPM-21 follow-up: mobile/gateway queue claims enforce the eight-attempt budget
+when recovering from a worker crash. Expired exhausted rows become terminal in
+bounded batches; unexpired leases remain unchanged. Real PostgreSQL tests
+simulate persisted crash states, exercise concurrent recovery, and verify no
+ninth forwarding/provider call. The merged baseline reproduced the bug; the
+fixed integration passed. Actual APNs/FCM device delivery remains unverified.

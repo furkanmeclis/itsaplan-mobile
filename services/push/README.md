@@ -31,8 +31,16 @@ payloads or gateway delivery rows. Notification traffic still exposes timing,
 token and opaque identifiers to the gateway/provider; this is not anonymity.
 
 Both queues use database leases, `SKIP LOCKED`, stable delivery IDs and bounded
-exponential retries with jitter (8 attempts). Gateway receipt is idempotent per
-tenant and delivery ID; conflicting reuse is rejected. Provider `Retry-After`
+exponential retries with jitter (8 attempts). Claims also enforce this limit
+after a worker crash. An expired final-attempt lease becomes `failed` with
+`attempts_exhausted`, while an unexpired lease is left alone; exhausted rows are
+settled in bounded, concurrent-safe batches. Earlier expired attempts can recover.
+An exhausted final attempt might already have reached the provider before the
+crash; the failure status records a missing completion acknowledgement, not proof
+of non-delivery. Restart both mobile and gateway workers to apply this behavior;
+no database migration or mobile application update is required.
+
+Gateway receipt is idempotent per tenant and delivery ID; conflicting reuse is rejected. Provider `Retry-After`
 is honored up to one day. Revocation, preference changes and provider-invalid
 tokens cancel pending work; invalid/revoked tokens are wiped. In-flight provider
 requests may finish before revocation returns. A process crash after provider
