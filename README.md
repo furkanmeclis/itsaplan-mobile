@@ -2,7 +2,11 @@
 
 An open-source, multi-server mobile companion for [It's a Plan](https://github.com/croffasia/itsaplan).
 
-**Selected design: 01 / Sakin, with configurable theme colors.** The Expo 58 application uses one `@expo/ui` universal component tree for Android and iOS. Its interactive screens use clearly labeled, in-memory demo data. Real server sign-in and push are not connected.
+**Selected design: 01 / Sakin, with shared theme colors.** The Expo 58 application
+uses one `@expo/ui` universal component tree for Android and iOS. It supports
+HTTPS server login with isolated accounts, projects, assigned tasks, details,
+state changes, comments and a source-aware inbox. A separately labeled demo is
+also available. Push and physical-device validation remain outstanding.
 
 ## Development
 
@@ -18,9 +22,10 @@ npm start
 ```
 
 See [the mobile foundation and validation guide](docs/mobile-foundation.md) and
-[upstream API/auth research](docs/upstream-api-research.md). Theme values are in
-`src/theme.ts`. The demo supports account switching, projects, task details,
-completion, comments and source-aware inbox navigation.
+[upstream API/auth research](docs/upstream-api-research.md).
+[Live account setup and limitations](docs/live-accounts.md) describe the API and
+web URL fields, supported password login, storage and two-server integration test.
+Theme values are in `src/theme.ts`.
 
 ## Design review
 

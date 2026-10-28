@@ -37,9 +37,50 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  upstream:
+    name: Real upstream HTTPS accounts and API
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: croffasia/itsaplan
+          ref: 73aadf9945ec4c8a23c749fb4f4dee25b036acb3
+          path: .upstream
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Install pinned upstream Bun runtime
+        run: npm install --prefix "$RUNNER_TEMP/ipm-tools" bun@1.4.3 --no-audit --no-fund
+      - name: Install upstream dependencies from lockfile
+        working-directory: .upstream
+        run: '"$RUNNER_TEMP/ipm-tools/node_modules/.bin/bun" install --frozen-lockfile'
+      - name: Verify two HTTPS servers, independent accounts, tasks, comments and logout
+        run: node integration/run.mjs
+        env:
+          UPSTREAM_ROOT: ${{ github.workspace }}/.upstream
+          BUN_BINARY: ${{ runner.temp }}/ipm-tools/node_modules/.bin/bun
+          UPSTREAM_DB_URL: postgres://postgres@127.0.0.1:5432/postgres
+
   android:
     name: Android debug APK
-    needs: validate
+    needs: [validate, upstream]
     runs-on: ubuntu-latest
     timeout-minutes: 60
     env:
@@ -76,7 +117,7 @@ jobs:
 
   ios:
     name: iOS simulator application
-    needs: validate
+    needs: [validate, upstream]
     runs-on: macos-26
     timeout-minutes: 60
     env:

@@ -2,7 +2,9 @@
 
 Inspected `croffasia/itsaplan` at
 `73aadf9945ec4c8a23c749fb4f4dee25b036acb3` on 2026-10-28. This is source-level
-research. No live self-hosted server has been supplied or authenticated.
+research. A follow-up [live account implementation and test](live-accounts.md)
+uses two disposable local instances of this upstream commit over verified HTTPS.
+No operator-owned production server has been supplied or authenticated.
 
 ## Native authentication
 
@@ -34,6 +36,10 @@ a narrowly scoped mobile OAuth integration. Do not silently change the server's
 trusted origins or repurpose the MCP audience. A server compatibility handshake
 must advertise the supported native transport and API version; no mobile
 capability endpoint was found in the inspected source.
+
+The implemented transport uses the existing cookie login with explicit account
+cookies and a separately supplied trusted web origin. This path passed real
+upstream API tests; device-native transport and storage acceptance remain open.
 
 ## Planner surface
 

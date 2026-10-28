@@ -1,5 +1,9 @@
 # Mobile foundation — IPM-4, IPM-5, IPM-6, IPM-7
 
+The demo and foundation checks below remain available. The default app now uses
+[live account screens](live-accounts.md); that guide describes real API behavior,
+the 26 current unit tests and the additional two-server upstream integration job.
+
 The application uses Expo 58.0.20, React Native 0.88.0, React 19.3.0,
 TypeScript 6 and the root universal API of `@expo/ui` 58.0.24. One component
 tree in `App.tsx` serves Android and iOS. `src/theme.ts` defines the Sakin palette,
@@ -32,7 +36,7 @@ the current online React Native Directory.
 
 ## Demo behavior
 
-Every screen displays the demo notice. There are no network calls or real
+Every demo screen displays the demo notice. The demo makes no network calls or real
 credentials. Tasks, projects, task details, completion/reopening, comments, a
 combined source-aware inbox and account-level demo preferences are interactive.
 Removing an example account removes its in-memory data. Restarting the app resets
@@ -44,8 +48,8 @@ keys include that account identity and resource kind. Deployment paths are
 preserved; URL user info, queries and fragments are rejected.
 
 The storage adapter in `src/storage/secureSessionVault.ts` uses Expo SecureStore
-and SHA-256-derived account slots. It is prepared for the auth implementation;
-the demo does not create a session. Unit tests exercise the vault contract with
+and SHA-256-derived account slots for the live password-login flow. The demo
+does not create a session. Unit tests exercise the vault contract with
 an in-memory storage port. Keychain/Keystore persistence still needs device tests.
 The disconnect contract requires successful device revocation before removing
 the credential; offline revocation leaves it available for an explicit retry.
