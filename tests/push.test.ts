@@ -9,7 +9,8 @@ const b = { ...a, server: 'https://b.example', label: 'B' };
 const credential = async () => ({ cookie: '__Host-better-auth.session_token=synthetic' });
 function fixture() {
   const values = new Map<string, PushRegistration>();
-  const store: PushStore = { read: async (a) => values.get(accountKey(a)) ?? null, write: async (a,r) => { values.set(accountKey(a),r); }, remove: async (a) => { values.delete(accountKey(a)); }, installationId: async () => randomUUID() };
+  const installationId = randomUUID();
+  const store: PushStore = { read: async (a) => values.get(accountKey(a)) ?? null, write: async (a,r) => { values.set(accountKey(a),r); }, remove: async (a) => { values.delete(accountKey(a)); }, installationId: async () => installationId };
   return { values, store };
 }
 test('notification routing trusts local registrations, selects the original server and rejects unknown or removed accounts', async () => {
@@ -55,4 +56,15 @@ test('failed remote revocation retains the mapping for retry; success removes on
   await assert.rejects(manager.unregister(a)); assert.equal(values.size,2);
   available = true; await manager.unregister(a);
   assert.equal(values.has(accountKey(a)), false); assert.equal(values.has(accountKey(b)), true);
+});
+
+
+test('logout can revoke a registration whose successful response was lost before local persistence', async () => {
+  const { values, store } = fixture(); const installationId = await store.installationId();
+  const calls: string[] = []; let available = false;
+  const manager = new PushManager(new PlannerClient(async (url) => { calls.push(url); return new Response(null, { status: available ? 204 : 503 }); }), store, credential, async () => { throw Error(); });
+  await assert.rejects(manager.unregister(a));
+  available = true; await manager.unregister(a);
+  assert.deepEqual(calls, [`${a.server}/mobile/installations/${installationId}`, `${a.server}/mobile/installations/${installationId}`]);
+  assert.equal(values.size,0);
 });

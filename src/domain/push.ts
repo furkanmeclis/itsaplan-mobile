@@ -60,7 +60,10 @@ export class PushManager {
   unregister(account: ConnectedAccount): Promise<void> {
     return this.exclusive(account, async () => {
       const registration = await this.store.read(account);
-      if (!registration) return;
+      if (!registration) {
+        await this.client.unregisterPushInstallation(account, await this.credential(account), await this.store.installationId());
+        return;
+      }
       await this.client.unregisterPush(account, await this.credential(account), registration.deviceId);
       await this.store.remove(account);
     });

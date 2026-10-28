@@ -59,4 +59,10 @@ Upstream inspected: `croffasia/itsaplan`, commit `73aadf9945ec4c8a23c749fb4f4dee
 
 The source includes a REST project API and a project-scoped notification inbox, with assigned, mentioned, commented, and state-changed notification types. The project model includes workspace/team/project references. These existing structures should be reused rather than replaced.
 
-Native session handling, API compatibility detection, notification event hooks, device registration, gateway authentication, and durable queue selection still require implementation-level investigation. No live server has been supplied or connected. No real push has been sent.
+The current PR implements isolated native sessions and API contract checks,
+transactional upstream inbox hooks, device registration/revocation, gateway
+authentication and PostgreSQL delivery queues. Real upstream HTTPS contract tests
+and provider-boundary tests pass. Native session persistence and actual APNs/FCM
+delivery require physical-device acceptance. No operator-owned live server or
+provider credentials have been supplied; no real push has been sent. See
+`services/push/README.md` and `docs/device-testing.md`.

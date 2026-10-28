@@ -2,7 +2,7 @@
 
 The demo and foundation checks below remain available. The default app now uses
 [live account screens](live-accounts.md); that guide describes real API behavior,
-the 34 current unit tests and the additional two-server upstream integration job.
+the 41 current mobile unit tests and the additional two-server upstream integration job.
 
 The application uses Expo 58.0.21, React Native 0.88.0, React 19.3.0,
 TypeScript 6 and the root universal API of `@expo/ui` 58.0.25. One component
@@ -53,22 +53,27 @@ does not create a session. Unit tests exercise the vault contract with
 an in-memory storage port. Keychain/Keystore persistence still needs device tests.
 The disconnect contract requires successful device revocation before removing
 the credential; offline revocation leaves it available for an explicit retry.
-There is no device registration endpoint wired into the app yet.
+Native registration/revocation and account preferences now use the optional
+`services/push` extension. Actual APNs/FCM and physical-device delivery remain unverified.
 
 `loadAccounts` runs requests independently with per-account deadlines and abort
 signals. The helper and opaque notification-routing resolver are tested domain
-foundations; real API loading and OS notification callbacks are not connected.
+foundations. Real API loading and OS notification response callbacks are now
+connected; physical-device execution remains separate acceptance work.
 
 ## CI and artifacts
 
 The `Mobile` workflow performs a clean `npm ci`, compatibility check, typecheck,
-13 isolation tests, and separate Android/iOS Hermes bundle exports. Native jobs
-depend on that validation job:
+41 mobile tests, 6 gateway/security/provider tests, and separate Android/iOS
+Hermes bundle exports. Native jobs depend on validation and the real upstream
+HTTPS integration job:
 
 - `mobile-platform-bundles`: generated Android/iOS JavaScript and metadata.
 - `mobile-android-debug-apk`: Gradle debug APK for arm64 devices and x86_64 emulators.
   This development APK requires Metro (`npm start` and `adb reverse tcp:8081 tcp:8081`
   for a USB-connected Android device). It is not a standalone release binary.
+- `mobile-android-standalone-preview`: development-key signed arm64 APK with
+  embedded JavaScript for device testing without Metro; not store distribution.
 - `mobile-ios-simulator-app`: unsigned simulator `.app` inside a ZIP; install with
   `xcrun simctl install booted <application.app>`. Debug builds require Metro.
 
@@ -86,11 +91,12 @@ checked on 2026-10-28. References:
 - [Official documentation source](https://github.com/expo/expo/blob/sdk-58/docs/pages/versions/v58.0.0/sdk/ui/universal/index.mdx)
 - [Expo template](https://www.npmjs.com/package/expo-template-blank-typescript/v/58.0.29)
 
-Local clean installation, typecheck, 13 tests, both platform bundle exports and
-native project generation passed. A generated native project is not a compiled
+Local clean installation, both typechecks, 41 mobile tests, 6 service tests,
+both platform bundle exports and the real upstream integration scenarios passed. A generated native project is not a compiled
 APK or simulator application. Native CI results must be read before IPM-7 is
-accepted. Native UI rendering, real sessions, real-server mutations, push and
-real-device behavior remain unverified.
+accepted. Real upstream session/mutation contracts are verified by the HTTPS
+integration suite. Native UI rendering, OS session behavior and actual provider
+side/device push delivery remain unverified.
 
 `npm audit` reports two upstream toolchain advisories affecting eight dependency
 nodes (three high, five low): Zod collection validation

@@ -247,6 +247,10 @@ export class PlannerClient {
     try { await this.request(account.server, `/mobile/devices/${uuid(deviceId)}`, { method: 'DELETE', credential, webOrigin: account.webOrigin }); }
     catch (error) { if (!(error instanceof ApiError && error.status === 404)) throw error; }
   }
+  async unregisterPushInstallation(account: ConnectedAccount, credential: Credential, installationId: string): Promise<void> {
+    try { await this.request(account.server, `/mobile/installations/${uuid(installationId)}`, { method: 'DELETE', credential, webOrigin: account.webOrigin }); }
+    catch (error) { if (!(error instanceof ApiError && error.status === 404)) throw error; }
+  }
   async resolvePush(account: ConnectedAccount, credential: Credential, notificationId: string): Promise<{ accountId: string; issueId: number; notificationId: number }> {
     const value = object((await this.request(account.server, `/mobile/notifications/${uuid(notificationId)}`, { credential })).value);
     return { accountId: uuid(value.accountId), issueId: number(value.issueId), notificationId: number(value.notificationId) };

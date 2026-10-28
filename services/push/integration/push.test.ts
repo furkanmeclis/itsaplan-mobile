@@ -135,6 +135,17 @@ test('upstream event → durable mobile queue → gateway → provider boundary,
     await tick('https://localhost:34563', '/__test/tick'); await a.comment(); await tick(a.server, '/__test/mobile-tick');
     assert.equal((await gatewayDb`SELECT count(*)::int AS count FROM push_test_sent`)[0].count, beforeLogout);
     assert.equal((await fetch(`${a.server}/mobile/notifications/${aEvent.id}`, { headers: { Cookie: a.owner.cookie } })).status, 404);
+    // Simulate a successful enrolment response lost before the client stored deviceId.
+    await api(a.server, '/mobile/devices', a.owner.cookie, { installationId: installation, provider: 'fcm', token: `lost-response-test-${randomUUID()}` });
+    await api(a.server, `/mobile/installations/${installation}`, a.actor.cookie, undefined, 'DELETE');
+    assert.equal((await sqlA`SELECT active FROM mobile_device WHERE id=${aDevice.deviceId}`)[0].active, true);
+    await a.comment(); await tick(a.server, '/__test/mobile-tick');
+    const beforeLostResponseLogout = (await gatewayDb`SELECT count(*)::int AS count FROM push_test_sent`)[0].count;
+    await api(a.server, `/mobile/installations/${installation}`, a.owner.cookie, undefined, 'DELETE');
+    await api(a.server, `/mobile/installations/${installation}`, a.owner.cookie, undefined, 'DELETE');
+    await tick('https://localhost:34563', '/__test/tick');
+    assert.equal((await gatewayDb`SELECT count(*)::int AS count FROM push_test_sent`)[0].count, beforeLostResponseLogout);
+    assert.equal((await sqlA`SELECT active FROM mobile_device WHERE id=${aDevice.deviceId}`)[0].active, false);
     await b.comment();
     await sqlB`UPDATE "user" SET active=false WHERE id=${b.owner.id}`;
     await tick(b.server, '/__test/mobile-tick');

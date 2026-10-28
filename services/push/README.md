@@ -128,6 +128,11 @@ For APNs mount the private `.p8` key at `APNS_KEY_FILE`; set `APNS_KEY_ID`,
 for distribution. The provider uses HTTP/2, ES256 tokens and the corresponding
 fixed Apple endpoint. `HTTPS_PROXY` CONNECT is supported with TLS verification.
 
+For Node 24 behind an outbound proxy, set `NODE_USE_ENV_PROXY=1` and preserve
+your `HTTPS_PROXY`, `NO_PROXY` and trusted CA configuration. Keep internal
+PostgreSQL/loopback traffic in the appropriate bypass list; never disable TLS
+verification. The APNs transport handles HTTPS proxy CONNECT itself.
+
 For FCM mount a service-account JSON at `FCM_SERVICE_ACCOUNT_FILE`. The adapter
 uses its `client_email`, RSA `private_key`, and `project_id` with the fixed Google
 OAuth and FCM HTTP v1 endpoints. Ignore arbitrary token URLs in account files.
@@ -151,6 +156,8 @@ application must agree. Expo Go does not validate this native push integration.
   determines ownership; returns `{deviceId,accountId}`. Retrying registration
   retains IDs; re-registration is required after provider token retirement.
 - `DELETE /mobile/devices/:deviceId`: revoke only that user's installation.
+- `DELETE /mobile/installations/:installationId`: owner-scoped idempotent revoke
+  when a registration response was lost before the client stored its device ID.
 - `GET /mobile/notifications/:opaqueId`: owner/permission-checked task route.
 
 All authenticated routes reuse upstream session cookies. Unknown fields and

@@ -64,13 +64,16 @@ export function mobileHandler(deps: ServerDependencies) {
           return json({ deviceId: id, accountId }, 201);
         });
       }
-      const deviceMatch = path.match(/^\/mobile\/devices\/([^/]+)$/);
+      const deviceMatch = path.match(/^\/mobile\/(devices|installations)\/([^/]+)$/);
       if (deviceMatch && request.method === 'DELETE') {
-        const id = uuid(deviceMatch[1]);
+        const lookupId = uuid(deviceMatch[2]);
         return await sql.begin(async (tx) => {
           await tx`SELECT pg_advisory_xact_lock(hashtext(${`mobile:${user.id}`}))`;
-          const [device] = await tx`SELECT id FROM mobile_device WHERE id=${id} AND user_id=${user.id} FOR UPDATE`;
-          if (!device) throw new HttpError(404, 'not_found');
+          const [device] = deviceMatch[1] === 'installations'
+            ? await tx`SELECT id FROM mobile_device WHERE installation_id=${lookupId} AND user_id=${user.id} FOR UPDATE`
+            : await tx`SELECT id FROM mobile_device WHERE id=${lookupId} AND user_id=${user.id} FOR UPDATE`;
+          if (!device) { if (deviceMatch[1] === 'installations') return new Response(null, { status: 204 }); throw new HttpError(404, 'not_found'); }
+          const id = device.id;
           await tx`UPDATE mobile_device SET active=false,token_encrypted='' WHERE id=${id}`;
           await tx`UPDATE mobile_delivery SET status='cancelled',lease_token=NULL WHERE device_id=${id} AND status='pending'`;
           try { await gateway.revoke(id); } catch { return json({ error: 'gateway_sync_pending' }, 503); }

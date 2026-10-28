@@ -35,10 +35,12 @@ from the input after submission and never persisted. The server is the authority
 for expiration and revocation; an expired account prompts reauthentication.
 
 Account-index mutations are serialized. Failed index persistence rolls back the
-credential and attempts to revoke the new, unretained session. Logout signs out
-the selected server session before removing its index and credential. An offline
-logout leaves the account available for retry. No device registration exists yet,
-so this is session logout, not push-device revocation.
+credential and attempts to revoke the new, unretained session. Logout revokes
+the selected account’s device registration before signing out its server session
+and removing its index and credential. If a registration response was lost,
+revocation uses the installation UUID instead of relying on a stored device ID.
+Failed/offline revocation or logout keeps the account available for retry. Stock
+upstream servers return 404 for the optional mobile extension and remain usable.
 
 Project/inbox snapshots and navigation include the account key. Background reads
 are independently bounded and canceled on refresh/removal. Available accounts
@@ -64,12 +66,16 @@ unloaded pages and unavailable accounts are not counted as read or empty. Overla
 between pages is deduplicated without undoing acknowledged read changes.
 
 Descriptions and comment bodies are displayed as text. Rich document/Markdown
-rendering, offline data persistence, push
-preferences and APNs/FCM delivery are not part of this change.
+rendering and offline task persistence remain unimplemented. Native push
+preferences, registration and routing use the optional server extension described
+in [push deployment](../services/push/README.md). Actual APNs/FCM delivery still
+requires provider configuration and physical-device acceptance.
 
 ## Validation
 
-`npm test` runs 34 domain and transport tests. The actual upstream wire contract
+`npm test` runs 41 domain and transport tests. `npm test --prefix services/push`
+runs 6 security/provider tests; install that package with
+`npm ci --prefix services/push` before running the expanded integration suite. The actual upstream wire contract
 has a separate test against two independently migrated PostgreSQL databases and
 two real Elysia/better-auth HTTPS servers, pinned to upstream commit
 `73aadf9945ec4c8a23c749fb4f4dee25b036acb3` and Bun 1.4.3.
@@ -94,8 +100,9 @@ servers, assigned-task summaries, task details, state updates, comments, inbox a
 single-account logout without invalidating the other sessions. It also generates
 real notifications through project invitations and comments on both servers,
 verifies correct routing for equal notification/task IDs, read/unread isolation,
-rejection of changes to another user's notification, and cursor pagination. It is one
-end-to-end test with multiple assertions. It uses the same client/domain code and
+rejection of changes to another user's notification, and cursor pagination. A second scenario exercises the real upstream inbox transaction through the
+mobile outbox and tenant-isolated gateway, including retries, revocation and
+lost-response logout recovery. Only the provider transport boundary is a double. It uses the same client/domain code and
 standard Node fetch; Expo's native fetch adapter and SecureStore are verified by
 compilation and source inspection, not physical-device execution.
 
