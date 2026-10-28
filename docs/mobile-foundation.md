@@ -2,7 +2,7 @@
 
 The demo and foundation checks below remain available. The default app now uses
 [live account screens](live-accounts.md); that guide describes real API behavior,
-the 41 current mobile unit tests and the additional two-server upstream integration job.
+the 42 current mobile unit tests and the additional two-server upstream integration job.
 
 The application uses Expo 58.0.21, React Native 0.88.0, React 19.3.0,
 TypeScript 6 and the root universal API of `@expo/ui` 58.0.25. One component
@@ -64,7 +64,7 @@ connected; physical-device execution remains separate acceptance work.
 ## CI and artifacts
 
 The `Mobile` workflow performs a clean `npm ci`, compatibility check, typecheck,
-41 mobile tests, 6 gateway/security/provider tests, and separate Android/iOS
+42 mobile tests, 6 gateway/security/provider tests, and separate Android/iOS
 Hermes bundle exports. Native jobs depend on validation and the real upstream
 HTTPS integration job:
 
@@ -91,7 +91,7 @@ checked on 2026-10-28. References:
 - [Official documentation source](https://github.com/expo/expo/blob/sdk-58/docs/pages/versions/v58.0.0/sdk/ui/universal/index.mdx)
 - [Expo template](https://www.npmjs.com/package/expo-template-blank-typescript/v/58.0.29)
 
-Local clean installation, both typechecks, 41 mobile tests, 6 service tests,
+Local clean installation, both typechecks, 42 mobile tests, 6 service tests,
 both platform bundle exports and the real upstream integration scenarios passed. A generated native project is not a compiled
 APK or simulator application. Native CI results must be read before IPM-7 is
 accepted. Real upstream session/mutation contracts are verified by the HTTPS

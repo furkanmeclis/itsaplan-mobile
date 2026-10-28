@@ -68,3 +68,13 @@ test('logout can revoke a registration whose successful response was lost before
   assert.deepEqual(calls, [`${a.server}/mobile/installations/${installationId}`, `${a.server}/mobile/installations/${installationId}`]);
   assert.equal(values.size,0);
 });
+
+test('servers without the mobile extension allow logout when installation revocation returns 404', async () => {
+  const { store } = fixture();
+  const manager = new PushManager(new PlannerClient(async (url, init) => {
+    assert.ok(url.startsWith(`${a.server}/mobile/installations/`));
+    assert.equal(init.method,'DELETE');
+    return new Response('Not found',{status:404});
+  }),store,credential,async()=>{throw Error('must not ask for a token');});
+  await manager.unregister(a);
+});

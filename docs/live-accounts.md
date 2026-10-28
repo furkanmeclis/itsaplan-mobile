@@ -73,7 +73,7 @@ requires provider configuration and physical-device acceptance.
 
 ## Validation
 
-`npm test` runs 41 domain and transport tests. `npm test --prefix services/push`
+`npm test` runs 42 domain and transport tests. `npm test --prefix services/push`
 runs 6 security/provider tests; install that package with
 `npm ci --prefix services/push` before running the expanded integration suite. The actual upstream wire contract
 has a separate test against two independently migrated PostgreSQL databases and
