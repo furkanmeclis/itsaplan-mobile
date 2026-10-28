@@ -28,13 +28,13 @@ def text_values(root):
     return [node.get(key, "") for node in root.iter("node") for key in ("text", "content-desc")]
 
 
-def wait_ui(labels, timeout=180):
+def wait_ui(labels, timeout=180, ready=None):
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         try:
             root, data = hierarchy()
             values = text_values(root)
-            if all(any(label in value for value in values) for label in labels):
+            if all(any(label in value for value in values) for label in labels) and (ready is None or ready(root)):
                 return root, data
         except (subprocess.SubprocessError, ET.ParseError):
             pass
@@ -115,7 +115,8 @@ def main(apk_path):
         report["checks"].append("returned to real account entry without enrolling a server")
         adb("shell", "settings", "put", "system", "font_scale", "1.3")
         launch()
-        root, data = wait_ui(["Sunucu hesapları", "Demoyu incele", "Sunucuya bağlan"])
+        root, data = wait_ui(["Sunucu hesapları", "Demoyu incele", "Sunucuya bağlan"],
+                             ready=lambda root: label_height(root, "Sunucuya bağlan") >= baseline_height * 1.1)
         observed_scale = float(adb("shell", "settings", "get", "system", "font_scale").decode().strip())
         scaled_height = label_height(root, "Sunucuya bağlan")
         if observed_scale < 1.29 or scaled_height < baseline_height * 1.1:

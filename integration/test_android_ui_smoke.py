@@ -13,17 +13,20 @@ FRESH = b'<hierarchy><node text="Screen ready" bounds="[0,0][100,36]"/></hierarc
 
 
 class VirtualDevice:
-    def __init__(self, fresh_on=None):
+    def __init__(self, fresh_on=None, frames=None):
         self.files = {"/sdcard/ipm-window.xml": OLD}
         self.dumps = 0
         self.fresh_on = fresh_on
+        self.frames = frames
 
     def adb(self, *args, **kwargs):
         if args[:3] == ("shell", "rm", "-f"):
             self.files.pop(args[3], None)
         elif args[:3] == ("shell", "uiautomator", "dump"):
             self.dumps += 1
-            if self.fresh_on is not None and self.dumps >= self.fresh_on:
+            if self.frames:
+                self.files[args[3]] = self.frames[min(self.dumps - 1, len(self.frames) - 1)]
+            elif self.fresh_on is not None and self.dumps >= self.fresh_on:
                 self.files[args[3]] = FRESH
             # Android's dump can return zero without creating a file.
             return b""
@@ -47,6 +50,13 @@ class EvidenceFreshness(unittest.TestCase):
             root, data = smoke.wait_ui(["Screen ready"])
         self.assertEqual(data, FRESH)
         self.assertEqual(smoke.label_height(root, "Screen ready"), 36)
+        self.assertEqual(device.dumps, 2)
+
+    def test_waits_for_scaled_text_even_when_matching_labels_are_fresh(self):
+        device = VirtualDevice(frames=[OLD, FRESH])
+        with patch.object(smoke, "adb", device.adb), patch.object(smoke.time, "sleep"):
+            root, data = smoke.wait_ui(["Screen ready"], ready=lambda root: smoke.label_height(root, "Screen ready") > 28)
+        self.assertEqual(data, FRESH)
         self.assertEqual(device.dumps, 2)
 
 
