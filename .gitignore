@@ -1,0 +1,12 @@
+.DS_Store
+node_modules/
+.expo/
+dist/
+.env
+.env.*
+!.env.example
+*.keystore
+*.jks
+*.p12
+*.mobileprovision
+test-results/
