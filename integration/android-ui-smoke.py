@@ -118,9 +118,29 @@ def visible_label(root, label, display):
     return False
 
 
-def keyboard_visible():
-    state = adb("shell", "dumpsys", "input_method").decode()
-    return bool(re.search(r"\bm(?:InputShown|IsInputViewShown)=true\b", state))
+def keyboard_frame():
+    state = adb("shell", "dumpsys", "window", "-a", "windows").decode()
+    sections = re.split(r"(?m)^\s*Window #\d+ ", state)
+    if len(sections) < 2:
+        raise AssertionError("Cannot read current Android window state")
+    for section in sections[1:]:
+        if not re.search(r"\bInputMethod\b", section.splitlines()[0]):
+            continue
+        if not re.search(r"(?m)^\s*isVisible=true\s*$", section):
+            continue
+        bounds = re.search(r"\bframe=\[(-?\d+),(-?\d+)\]\[(-?\d+),(-?\d+)\]", section)
+        if bounds is None:
+            raise AssertionError("Visible keyboard has no window frame")
+        frame = tuple(map(int, bounds.groups()))
+        if frame[2] <= frame[0] or frame[3] <= frame[1]:
+            raise AssertionError("Visible keyboard has empty window frame")
+        return frame
+    return None
+
+
+def input_above_keyboard(root, label, display):
+    frame = keyboard_frame()
+    return frame is not None and visible_label(root, label, (display[0], frame[1]))
 
 
 def scroll_to_label(label, display):
@@ -190,14 +210,16 @@ def main(apk_path):
         tap(root, "HTTPS API adresi")
         probe = "https://mobile.invalid"
         adb("shell", "input", "text", probe)
-        root, data = wait_ui([probe], ready=lambda root: keyboard_visible() and visible_label(root, probe, display))
+        root, data = wait_ui([probe], ready=lambda root: input_above_keyboard(root, probe, display))
+        opened_frame = keyboard_frame()
         capture("05-url-keyboard-open", data)
         report["checks"].append("URL field accepts reserved test address with software keyboard visible")
         adb("shell", "input", "keyevent", "KEYCODE_BACK")
-        root, data = wait_ui([probe], ready=lambda root: not keyboard_visible())
+        root, data = wait_ui([probe], ready=lambda root: keyboard_frame() is None)
         capture("06-url-keyboard-closed", data)
         report["checks"].append("back dismisses keyboard and preserves URL field without submitting login")
-        report["keyboard"] = {"opened": True, "dismissedWithBack": True}
+        report["keyboard"] = {"opened": True, "dismissedWithBack": True, "frame": opened_frame,
+                              "urlAboveKeyboard": True}
 
         adb("shell", "settings", "put", "system", "font_scale", "2.0")
         launch()
@@ -229,6 +251,11 @@ def main(apk_path):
             pass
         raise
     finally:
+        for name, args in [("window-state.txt", ("window", "-a", "windows")), ("ime-state.txt", ("input_method",))]:
+            try:
+                (OUTPUT / name).write_bytes(adb("shell", "dumpsys", *args))
+            except Exception:
+                pass
         try:
             pid = adb("shell", "pidof", PACKAGE).decode().strip().split()[0]
             if pid.isdigit():

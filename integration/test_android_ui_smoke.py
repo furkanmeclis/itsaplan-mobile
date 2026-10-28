@@ -101,11 +101,27 @@ class FormEvidence(unittest.TestCase):
             with self.subTest(bounds=bounds):
                 self.assertEqual(smoke.visible_label(root, "Giriş yap", (320, 640)), expected)
 
-    def test_keyboard_request_alone_is_not_visible_keyboard_evidence(self):
-        for state, expected in [(b"mShowRequested=true mInputShown=false", False),
-                                (b"mInputShown=true", True), (b"mIsInputViewShown=true", True)]:
-            with self.subTest(state=state), patch.object(smoke, "adb", return_value=state):
-                self.assertEqual(smoke.keyboard_visible(), expected)
+    def test_current_keyboard_window_ignores_historical_show_flags(self):
+        for visible in [True, False]:
+            state = ("WINDOW MANAGER WINDOWS\n  Window #0 Window{abc u0 App}:\n"
+                     "    isVisible=true\n  Window #1 Window{def u0 InputMethod}:\n"
+                     "    Frames: parent=[0,0][320,640] frame=[0,380][320,640]\n"
+                     f"    isVisible={str(visible).lower()}\n    mInputShown=true\n").encode()
+            with self.subTest(visible=visible), patch.object(smoke, "adb", return_value=state):
+                self.assertEqual(smoke.keyboard_frame(), (0, 380, 320, 640) if visible else None)
+
+    def test_unrecognized_window_dump_cannot_prove_keyboard_dismissal(self):
+        with patch.object(smoke, "adb", return_value=b"mInputShown=true"):
+            with self.assertRaises(AssertionError):
+                smoke.keyboard_frame()
+
+    def test_field_behind_visible_keyboard_cannot_pass_even_with_screen_bounds(self):
+        for bounds, expected in [("[45,400][250,450]", False), ("[45,300][250,350]", True)]:
+            root = ET.Element("hierarchy")
+            ET.SubElement(root, "node", {"text": "https://mobile.invalid", "bounds": bounds})
+            with self.subTest(bounds=bounds), patch.object(smoke, "keyboard_frame", return_value=(0, 380, 320, 640)):
+                self.assertTrue(smoke.visible_label(root, "https://mobile.invalid", (320, 640)))
+                self.assertEqual(smoke.input_above_keyboard(root, "https://mobile.invalid", (320, 640)), expected)
 
     def test_scroll_waits_for_visible_bounds_instead_of_matching_offscreen_text(self):
         hidden = '<hierarchy><node text="Giriş yap" bounds="[0,0][0,0]"/></hierarchy>'.encode()

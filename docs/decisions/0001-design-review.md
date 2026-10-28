@@ -35,3 +35,9 @@ Sakin theme and one universal Android/iOS implementation remain in use.
 Android emulator evidence checks 1.3/2.0 font scales, navigation and form
 scrolling. Physical-device and screen-reader acceptance is tracked separately.
 Review: https://github.com/furkanmeclis/itsaplan-mobile/pull/3
+
+The shared safe-area content is wrapped in KeyboardAvoidingView with padding
+behavior. A native Android screenshot exposed the URL field behind the keyboard;
+the layout must reserve keyboard space and the emulator check compares field
+bounds with the current IME window frame. This uses no platform-specific screen
+implementation.
