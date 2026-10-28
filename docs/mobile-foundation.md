@@ -69,7 +69,7 @@ depend on that validation job:
   `xcrun simctl install booted <application.app>`. Debug builds require Metro.
 
 Artifacts expire after 14 days. The iOS job uses macOS 26/Xcode; Android uses
-JDK 21, API 37.0, build tools 37 and NDK 27.1.12297006, matching React Native's installed toolchain
+JDK 21 with the JDK 17 compilation toolchain, API 37.0, build tools 37 and NDK 27.1.12297006, matching React Native's installed toolchain
 metadata. Generated `android/` and `ios/` projects are ignored and recreated by
 Expo prebuild. The HTML design artifact workflow remains separate.
 
