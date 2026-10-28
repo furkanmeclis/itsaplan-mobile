@@ -107,7 +107,18 @@ No forced dependency override or Expo downgrade was applied. Recheck upstream
 fixes before production distribution; do not feed untrusted configuration to
 these developer tools.
 
-It’s a Plan MCP is unavailable in this session. Project-center documents and IPM
-evidence fields could not be read or updated. No duplicate project/backlog was
-created. Link the existing PR and actual CI/artifact results to IPM-4–8 once the
-connector is exposed.
+The operator API-key connection reaches the real MCP endpoint; project documents
+and existing IPM task/evidence fields have been updated. An isolated test team
+holds operator fixtures. It does not replace the IPM process project.
+
+
+## Android UI evidence
+
+After native builds, `android-ui` installs the matching debug APK on an Android
+15/API 35 x86_64 emulator and connects it to Metro from the same checkout. It
+checks account entry, labeled demo navigation, return navigation and rendering
+at system font scale 1.3. `mobile-android-ui-evidence` contains PNG screenshots,
+UI hierarchy XML, a report and fresh-emulator app logs. No live account is enrolled
+and no operator/provider credentials are passed to the job. A passing result is
+emulator UI evidence; it is not physical-device, VoiceOver/TalkBack, mobile auth
+or provider-delivery acceptance.

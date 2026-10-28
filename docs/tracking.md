@@ -28,7 +28,16 @@ The extension/deployment contract is in `services/push/README.md`; physical
 acceptance steps are in `docs/device-testing.md`. A test provider boundary is
 explicitly used in the real-upstream integration suite.
 
-The current tool catalog has no It’s a Plan MCP operations, so this session
-cannot update existing task states or evidence fields. No substitute project or
-duplicate tasks were created. PR/CI evidence is retained for attaching to the
-existing IPM records when that connector becomes available.
+The operator API-key connection reaches the server’s MCP Streamable HTTP endpoint.
+Existing IPM task descriptions, states, PR/CI fields and project documents were
+updated and read back. Operator test mutations use a separate sandbox team; the
+existing IPM project remains the process source. Native cookie authentication and
+real-device push remain separate acceptance work.
+
+
+IPM-22: the Mobile workflow runs the debug APK on an Android 15 emulator after
+native compilation. The smoke check opens real account entry, switches to the
+explicitly labeled local demo, returns, and renders account entry at font scale
+1.3. PNGs, accessibility hierarchy XML and a JSON report are retained as
+`mobile-android-ui-evidence`. These checks use no server credentials, native login
+or APNs/FCM delivery. Physical Android/iOS accessibility acceptance remains open.

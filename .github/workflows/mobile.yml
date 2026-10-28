@@ -136,6 +136,61 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  android-ui:
+    name: Android emulator UI and screenshot evidence
+    needs: [android]
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      CI: '1'
+      EXPO_NO_TELEMETRY: '1'
+      EXPO_OFFLINE: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 17
+      - run: npm ci
+      - uses: actions/download-artifact@v4
+        with:
+          name: mobile-android-debug-apk
+          path: test-results/apk
+      - name: Allow the hosted runner to use KVM
+        run: sudo chmod 666 /dev/kvm
+      - name: Start Metro for the matching debug APK
+        run: |
+          mkdir -p test-results/android-ui
+          npm start -- --localhost --port 8081 > test-results/android-ui/metro.log 2>&1 &
+          echo "$!" > "$RUNNER_TEMP/ipm-metro.pid"
+      - name: Run native UI smoke checks on Android 15
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          disable-animations: true
+          emulator-boot-timeout: 600
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          script: python3 integration/android-ui-smoke.py test-results/apk/app-debug.apk
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mobile-android-ui-evidence
+          path: test-results/android-ui/
+          if-no-files-found: error
+          retention-days: 14
+      - name: Stop Metro
+        if: always()
+        run: |
+          if test -f "$RUNNER_TEMP/ipm-metro.pid"; then
+            kill "$(cat "$RUNNER_TEMP/ipm-metro.pid")" || true
+          fi
+
   ios:
     name: iOS simulator application
     needs: [validate, upstream]

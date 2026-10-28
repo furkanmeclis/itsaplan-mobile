@@ -1,0 +1,126 @@
+"""Exercise the real Android UI with local demo data; never enroll an account."""
+import json
+import re
+import subprocess
+import sys
+import time
+import urllib.request
+import xml.etree.ElementTree as ET
+from pathlib import Path
+
+PACKAGE = "software.technowide.itsaplan.mobile"
+OUTPUT = Path("test-results/android-ui")
+OUTPUT.mkdir(parents=True, exist_ok=True)
+
+
+def adb(*args, timeout=30):
+    return subprocess.run(["adb", *args], check=True, capture_output=True, timeout=timeout).stdout
+
+
+def hierarchy():
+    adb("shell", "uiautomator", "dump", "/sdcard/ipm-window.xml")
+    data = adb("exec-out", "cat", "/sdcard/ipm-window.xml")
+    return ET.fromstring(data), data
+
+
+def text_values(root):
+    return [node.get(key, "") for node in root.iter("node") for key in ("text", "content-desc")]
+
+
+def wait_ui(labels, timeout=180):
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        try:
+            root, data = hierarchy()
+            values = text_values(root)
+            if all(any(label in value for value in values) for label in labels):
+                return root, data
+        except (subprocess.SubprocessError, ET.ParseError):
+            pass
+        time.sleep(3)
+    raise AssertionError("Native UI did not expose the expected labels: " + ", ".join(labels))
+
+
+def capture(name, data):
+    (OUTPUT / (name + ".xml")).write_bytes(data)
+    (OUTPUT / (name + ".png")).write_bytes(adb("exec-out", "screencap", "-p"))
+
+
+def tap(root, label):
+    parents = {child: parent for parent in root.iter() for child in parent}
+    target = next((node for node in root.iter("node") if any(label in node.get(key, "") for key in ("text", "content-desc"))), None)
+    if target is None:
+        raise AssertionError("Missing control: " + label)
+    current = target
+    while current is not None:
+        if current.get("clickable") == "true":
+            target = current
+            break
+        current = parents.get(current)
+    values = [int(value) for value in re.findall(r"\d+", target.get("bounds", ""))]
+    if len(values) != 4 or values[2] <= values[0] or values[3] <= values[1]:
+        raise AssertionError("Control has no visible touch bounds: " + label)
+    adb("shell", "input", "tap", str((values[0] + values[2]) // 2), str((values[1] + values[3]) // 2))
+
+
+def launch():
+    adb("shell", "am", "force-stop", PACKAGE)
+    adb("shell", "am", "start", "-n", PACKAGE + "/.MainActivity")
+
+
+report = {"platform": "android-emulator", "data": "explicitly labeled local demo", "checks": [],
+          "realAuthentication": False, "providerDelivery": False, "physicalDevice": False}
+try:
+    apk = Path(sys.argv[1]).resolve()
+    if not apk.is_file():
+        raise AssertionError("Debug APK missing")
+    deadline = time.monotonic() + 90
+    while True:
+        try:
+            with urllib.request.urlopen("http://127.0.0.1:8081/status", timeout=2) as response:
+                if response.read(128).strip() == b"packager-status:running":
+                    break
+        except OSError:
+            pass
+        if time.monotonic() >= deadline:
+            raise AssertionError("Metro did not become ready")
+        time.sleep(1)
+    adb("install", "-r", str(apk), timeout=120)
+    adb("reverse", "tcp:8081", "tcp:8081")
+    adb("shell", "settings", "put", "system", "font_scale", "1.0")
+    launch()
+    root, data = wait_ui(["Sunucu hesapları", "Demoyu incele", "Sunucuya bağlan"])
+    capture("01-account-entry", data)
+    report["checks"].append("native account-entry screen rendered")
+    tap(root, "Demoyu incele")
+    root, data = wait_ui(["Örnek veriler", "ETKİLEŞİMLİ DEMO", "Gerçek hesaplara dön"])
+    capture("02-labeled-demo", data)
+    report["checks"].append("demo notice and native navigation rendered")
+    tap(root, "Gerçek hesaplara dön")
+    root, data = wait_ui(["Sunucu hesapları", "Sunucuya bağlan"])
+    capture("03-return-to-accounts", data)
+    report["checks"].append("returned to real account entry without enrolling a server")
+    adb("shell", "settings", "put", "system", "font_scale", "1.3")
+    launch()
+    root, data = wait_ui(["Sunucu hesapları", "Demoyu incele", "Sunucuya bağlan"])
+    capture("04-large-font-entry", data)
+    report["checks"].append("account entry rendered at system font scale 1.3")
+    report["status"] = "passed"
+except Exception as error:
+    report["status"] = "failed"
+    report["error"] = str(error)
+    try:
+        root, data = hierarchy()
+        capture("failure", data)
+    except Exception:
+        pass
+    raise
+finally:
+    try:
+        pid = adb("shell", "pidof", PACKAGE).decode().strip().split()[0]
+        if pid.isdigit():
+            (OUTPUT / "app-logcat.txt").write_bytes(adb("logcat", "-d", "--pid=" + pid))
+        adb("shell", "settings", "put", "system", "font_scale", "1.0")
+    except Exception:
+        pass
+    (OUTPUT / "report.json").write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n")
