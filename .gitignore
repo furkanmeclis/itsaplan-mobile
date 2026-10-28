@@ -10,3 +10,7 @@ dist/
 *.p12
 *.mobileprovision
 test-results/
+android/
+ios/
+*.tsbuildinfo
+.expo-shared/

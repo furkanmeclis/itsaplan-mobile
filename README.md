@@ -2,7 +2,25 @@
 
 An open-source, multi-server mobile companion for [It's a Plan](https://github.com/croffasia/itsaplan).
 
-**Selected design: 01 / Sakin, with configurable theme colors.** The native application foundation is in progress. The HTML prototype contains sample data and makes no server connections.
+**Selected design: 01 / Sakin, with configurable theme colors.** The Expo 58 application uses one `@expo/ui` universal component tree for Android and iOS. Its interactive screens use clearly labeled, in-memory demo data. Real server sign-in and push are not connected.
+
+## Development
+
+Use Node 24. From this checkout:
+
+```sh
+npm ci
+npm run typecheck
+npm test
+npm run bundle:android
+npm run bundle:ios
+npm start
+```
+
+See [the mobile foundation and validation guide](docs/mobile-foundation.md) and
+[upstream API/auth research](docs/upstream-api-research.md). Theme values are in
+`src/theme.ts`. The demo supports account switching, projects, task details,
+completion, comments and source-aware inbox navigation.
 
 ## Design review
 
@@ -29,9 +47,11 @@ See [the project brief](docs/project-brief.md), [delivery process](CONTRIBUTING.
 
 ## CI
 
-The initial `Design preview` workflow packages the standalone HTML and screenshots as a downloadable artifact on pull requests, pushes to `main`, and manual runs. It requires no secrets.
-
-Android APK and iOS simulator build workflows will be added with the Expo application. There is no native application build in this initial design PR.
+`Design preview` packages the standalone HTML and reference screenshot. `Mobile`
+runs clean installation, typecheck, isolation tests, Android/iOS bundle exports,
+and native Android debug APK/iOS simulator jobs. These jobs require no signing
+secrets. Native build results and device verification must be reported separately
+from successful JavaScript bundles; see the validation guide for artifact limits.
 
 ## License
 
