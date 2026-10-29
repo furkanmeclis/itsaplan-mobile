@@ -52,8 +52,31 @@ def focused_field_is_visible(root, minimum_height):
 
 def enter_field(label, value, display, secret=False):
     root, data = smoke.scroll_to_label(label, display, ready=lambda root: smoke.control_within_scroll_view(root, label))
-    minimum_height = smoke.label_height(root, label)
+    minimum_height = max(48, smoke.label_height(root, label))
     smoke.tap(root, label)
+    root, data = smoke.wait_ui([], ready=lambda root: smoke.keyboard_frame() is not None)
+    # Native caret auto-scroll can leave the control's padding clipped. Exercise
+    # the ordinary in-content swipe and require the whole 48px editing control.
+    for attempt in range(4):
+        if focused_field_is_visible(root, minimum_height):
+            break
+        frame = smoke.keyboard_frame()
+        parents = {child: parent for parent in root.iter() for child in parent}
+        focused = next((node for node in root.iter("node") if node.get("focused") == "true" and node.get("class") == "android.widget.EditText"), None)
+        viewport = parents.get(focused)
+        while viewport is not None and viewport.get("scrollable") != "true":
+            viewport = parents.get(viewport)
+        bounds = list(map(int, re.findall(r"-?\d+", viewport.get("bounds", "")))) if viewport is not None else []
+        if attempt == 3 or frame is None or len(bounds) != 4:
+            raise AssertionError("Focused editing control cannot be scrolled fully above keyboard")
+        bottom = min(bounds[3], frame[1])
+        start = bottom - 24
+        end = max(bounds[1] + 24, start - 96)
+        if start <= end:
+            raise AssertionError("No content viewport remains above the keyboard")
+        x = bounds[0] + 8
+        smoke.adb("shell", "input", "swipe", str(x), str(start), str(x), str(end), "300")
+        root, data = smoke.hierarchy()
     try:
         smoke.adb("shell", "input", "text", value)
     except subprocess.SubprocessError:
