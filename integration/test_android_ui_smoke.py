@@ -146,6 +146,22 @@ class FormEvidence(unittest.TestCase):
         adb.assert_called_once()
         self.assertTrue(smoke.visible_label(root, "Giriş yap", (320, 640)))
 
+    def test_scroll_rejects_recorded_button_clipped_at_viewport_edge(self):
+        frames = []
+        for button, label in [("[45,599][192,616]", "[69,608][168,616]"),
+                              ("[45,510][192,560]", "[69,519][168,551]")]:
+            data = (f'<hierarchy><node scrollable="true" bounds="[0,134][320,616]">'
+                    f'<node clickable="true" enabled="false" bounds="{button}">'
+                    f'<node text="Giriş yap" bounds="{label}"/></node></node></hierarchy>').encode()
+            frames.append((ET.fromstring(data), data))
+        self.assertTrue(smoke.visible_label(frames[0][0], "Giriş yap", (320, 640)))
+        self.assertFalse(smoke.control_within_scroll_view(frames[0][0], "Giriş yap"))
+        with patch.object(smoke, "hierarchy", side_effect=frames), patch.object(smoke, "adb") as adb, patch.object(smoke.time, "sleep"):
+            root, data = smoke.scroll_to_label("Giriş yap", (320, 640), ready=lambda root: smoke.control_within_scroll_view(root, "Giriş yap"))
+        adb.assert_called_once()
+        self.assertEqual(data, frames[1][1])
+        self.assertTrue(smoke.control_within_scroll_view(root, "Giriş yap"))
+
 
 if __name__ == "__main__":
     unittest.main()
