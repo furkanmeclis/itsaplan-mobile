@@ -61,3 +61,7 @@ from successful JavaScript bundles; see the validation guide for artifact limits
 ## License
 
 AGPL-3.0-only. This is an independent companion project and is not an official release of the upstream project. No upstream application code has been copied into this prototype.
+
+[Open-source attribution and source delivery](docs/open-source.md) documents the
+AGPL scope and reproducible npm/native license evidence. Run `npm run licenses:report`
+after both clean installs; review reported gaps before distributing binaries.

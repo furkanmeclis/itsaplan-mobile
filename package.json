@@ -30,7 +30,8 @@
     "typecheck": "tsc --noEmit",
     "test": "node --import tsx --test --test-isolation=none tests/*.test.ts",
     "bundle:android": "expo export --platform android --output-dir dist/android",
-    "bundle:ios": "expo export --platform ios --output-dir dist/ios"
+    "bundle:ios": "expo export --platform ios --output-dir dist/ios",
+    "licenses:report": "node scripts/generate-license-report.mjs"
   },
   "private": true
 }

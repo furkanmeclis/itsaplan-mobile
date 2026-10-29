@@ -31,6 +31,14 @@ jobs:
       - name: Verify UI evidence freshness regression
         run: python3 -m unittest discover -s integration -p 'test_android_ui_smoke.py'
       - run: npm ci --prefix services/push
+      - name: Collect npm license metadata and original notices
+        run: npm run licenses:report
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mobile-npm-license-evidence
+          path: dist/licenses/
+          if-no-files-found: error
+          retention-days: 90
       - run: npm run typecheck --prefix services/push
       - run: npm test --prefix services/push
       - run: npm run bundle:android
@@ -124,6 +132,17 @@ jobs:
       - name: Build standalone preview for an Android device
         working-directory: android
         run: ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a,x86_64 -Porg.gradle.java.installations.fromEnv=JAVA_HOME_17_X64,JAVA_HOME_21_X64 --max-workers=2 --stacktrace
+      - name: Record resolved Android runtime dependencies
+        working-directory: android
+        run: |
+          mkdir -p ../dist/native-licenses
+          ./gradlew :app:dependencies --configuration releaseRuntimeClasspath -Porg.gradle.java.installations.fromEnv=JAVA_HOME_17_X64,JAVA_HOME_21_X64 --max-workers=2 > ../dist/native-licenses/android-runtime-dependencies.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mobile-android-dependency-evidence
+          path: dist/native-licenses/
+          if-no-files-found: error
+          retention-days: 90
       - name: Verify JavaScript is embedded in the preview APK
         run: |
           python3 - <<'PY'
@@ -193,6 +212,25 @@ jobs:
       - name: Install CocoaPods dependencies
         working-directory: ios
         run: pod install
+      - name: Collect resolved CocoaPods licenses
+        run: |
+          mkdir -p dist/native-licenses
+          cp ios/Podfile.lock dist/native-licenses/Podfile.lock
+          python3 - <<'PYTHON'
+          from pathlib import Path
+          import shutil
+          files = list(Path('ios/Pods/Target Support Files').glob('*/*-acknowledgements.*'))
+          if not files:
+              raise SystemExit('CocoaPods acknowledgement files were not generated')
+          for file in files:
+              shutil.copyfile(file, Path('dist/native-licenses') / file.name)
+          PYTHON
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mobile-ios-license-evidence
+          path: dist/native-licenses/
+          if-no-files-found: error
+          retention-days: 90
       - name: Build unsigned simulator application
         shell: bash
         run: |
