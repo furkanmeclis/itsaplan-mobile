@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { BackHandler, Linking } from 'react-native';
-import { Host, Column, ScrollView, Text, Button } from '@expo/ui';
+import { Host, Column, ScrollView, Button } from '@expo/ui';
 import { sakinTheme } from '../theme';
+import { Text } from '../components/Text';
 
 const repository = 'https://github.com/furkanmeclis/itsaplan-mobile';
 export function OpenSource({ onBack }: { onBack: () => void }) {
