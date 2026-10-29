@@ -65,3 +65,7 @@ AGPL-3.0-only. This is an independent companion project and is not an official r
 [Open-source attribution and source delivery](docs/open-source.md) documents the
 AGPL scope and reproducible npm/native license evidence. Run `npm run licenses:report`
 after both clean installs; review reported gaps before distributing binaries.
+
+For physical-device push builds, see [native client configuration](docs/native-push-build.md).
+Provider send credentials stay in the gateway; Android Firebase client settings
+and iOS provisioning are separate from successful simulator builds.
