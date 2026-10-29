@@ -327,8 +327,24 @@ jobs:
       - name: Install native fixture prerequisites
         run: |
           npm install --prefix "$RUNNER_TEMP/ipm-tools" bun@1.4.3 --no-audit --no-fund
-          brew install postgresql@17
-          pg_bin="$(brew --prefix postgresql@17)/bin"
+          pg_bin=''
+          for formula in postgresql@17 postgresql@16 postgresql@15; do
+            candidate="$(brew --prefix "$formula" 2>/dev/null)/bin"
+            if test -x "$candidate/initdb" && test -x "$candidate/pg_ctl"; then
+              pg_bin="$candidate"
+              break
+            fi
+          done
+          if test -z "$pg_bin"; then
+            for attempt in 1 2 3; do
+              HOMEBREW_NO_AUTO_UPDATE=1 brew install postgresql@17 && break
+              if test "$attempt" = 3; then exit 1; fi
+              sleep 5
+            done
+            pg_bin="$(brew --prefix postgresql@17)/bin"
+          fi
+          echo "IPM_PG_BIN=$pg_bin" >> "$GITHUB_ENV"
+          "$pg_bin/postgres" --version
           "$pg_bin/initdb" -D "$RUNNER_TEMP/ipm-postgres" -A trust -U postgres
           "$pg_bin/pg_ctl" -D "$RUNNER_TEMP/ipm-postgres" -l "$RUNNER_TEMP/ipm-postgres.log" -o '-h 127.0.0.1 -p 54329' start
       - name: Install upstream dependencies from lockfile
@@ -393,7 +409,6 @@ jobs:
         shell: bash
         run: |
           node integration/stop-native-fixture.mjs "$RUNNER_TEMP/ipm-native/state.json"
-          pg_bin="$(brew --prefix postgresql@17)/bin"
-          if test -f "$RUNNER_TEMP/ipm-postgres/postmaster.pid"; then
-            "$pg_bin/pg_ctl" -D "$RUNNER_TEMP/ipm-postgres" -m fast stop
+          if test -n "${IPM_PG_BIN:-}" && test -f "$RUNNER_TEMP/ipm-postgres/postmaster.pid"; then
+            "$IPM_PG_BIN/pg_ctl" -D "$RUNNER_TEMP/ipm-postgres" -m fast stop
           fi
