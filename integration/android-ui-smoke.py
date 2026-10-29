@@ -151,10 +151,25 @@ def input_above_keyboard(root, label, display):
     return frame is not None and visible_label(root, label, (display[0], frame[1]))
 
 
-def scroll_to_label(label, display):
+def control_within_scroll_view(root, label):
+    parents = {child: parent for parent in root.iter() for child in parent}
+    control = next((node for node in root.iter("node") if any(label in node.get(key, "") for key in ("text", "content-desc"))), None)
+    while control is not None and control.get("clickable") != "true":
+        control = parents.get(control)
+    viewport = parents.get(control)
+    while viewport is not None and viewport.get("scrollable") != "true":
+        viewport = parents.get(viewport)
+    if control is None or viewport is None:
+        return False
+    bounds = [int(value) for value in re.findall(r"-?\d+", control.get("bounds", ""))]
+    window = [int(value) for value in re.findall(r"-?\d+", viewport.get("bounds", ""))]
+    return len(bounds) == len(window) == 4 and window[0] < bounds[0] < bounds[2] < window[2] and window[1] < bounds[1] < bounds[3] < window[3]
+
+
+def scroll_to_label(label, display, ready=None):
     for attempt in range(11):
         root, data = hierarchy()
-        if visible_label(root, label, display):
+        if visible_label(root, label, display) and (ready is None or ready(root)):
             return root, data
         if attempt < 10:
             adb("shell", "input", "swipe", str(display[0] // 2), str(int(display[1] * .8)),
@@ -245,9 +260,10 @@ def main(apk_path):
         tap(root, "Gerçek hesaplara dön")
         root, data = wait_ui(["Sunucu hesapları", "Sunucuya bağlan"])
         report["checks"].append("account heading and demo/return controls remain reachable at font scale 2.0")
-        root, data = scroll_to_label("Giriş yap", display)
+        root, data = scroll_to_label("Giriş yap", display, ready=lambda root: control_within_scroll_view(root, "Giriş yap"))
         capture("08-maximum-font-form-bottom", data)
-        report["checks"].append("maximum-font account form scrolls to login control without submitting it")
+        report["loginControlInsideViewport"] = True
+        report["checks"].append("maximum-font account form scrolls login control fully inside viewport without submitting it")
         report["status"] = "passed"
     except Exception as error:
         report["status"] = "failed"

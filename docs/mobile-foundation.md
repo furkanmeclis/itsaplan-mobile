@@ -120,7 +120,8 @@ After native builds, `android-ui` installs the matching standalone APK on an And
 no development server is used. It
 checks account entry, labeled demo navigation, return navigation and rendering
 at system font scales 1.3 and 2.0. At 2.0 it also exercises demo/return navigation
-and scrolls the form to its login control without pressing it. A separate check
+and scrolls until the login control is fully inside its scroll viewport without
+pressing it. A positive clipped text rectangle at the viewport edge cannot pass. A separate check
 types only `https://mobile.invalid`, verifies the software keyboard is shown,
 and dismisses it with Back while preserving the field. The editable field must
 remain above the current keyboard window frame. Current window visibility and content insets exclude the IME window’s
