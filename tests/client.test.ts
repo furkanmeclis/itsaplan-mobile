@@ -169,3 +169,26 @@ test('push revocation is awaited before sign-out and failure retains the session
   assert.equal(calls.at(-1)?.url.endsWith('/sign-out'), true);
   assert.deepEqual(await accounts.list(), []);
 });
+
+test('failed vault rollback still attempts server logout and preserves the original storage error', async () => {
+  for (const remoteUnavailable of [false, true]) {
+    const primary = new Error('Native secret storage is unavailable');
+    const { fetcher, calls } = loginFetcher();
+    const vault = new SessionVault({
+      get: async () => null,
+      set: async () => { throw primary; },
+      remove: async () => { throw new Error('Native rollback is also unavailable'); },
+    }, async (value) => createHash('sha256').update(value).digest('hex'));
+    const client = new PlannerClient(async (url, init) => {
+      const response = await fetcher(url, init);
+      return remoteUnavailable && url.endsWith('/sign-out') ? new Response(null, { status: 503 }) : response;
+    });
+    const accounts = new ConnectedAccounts({ read: async () => null, write: async () => assert.fail('Failed login must not persist an index entry') }, vault, client);
+    let caught: unknown;
+    try { await accounts.signIn(first.server, first.webOrigin, 'first@example.test', 'test-password'); }
+    catch (error) { caught = error; }
+    assert.equal(calls.filter((call) => call.url.endsWith('/sign-out')).length, 1);
+    assert.equal(caught, primary);
+    assert.deepEqual(await accounts.list(), []);
+  }
+});
