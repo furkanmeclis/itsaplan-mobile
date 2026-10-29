@@ -11,6 +11,7 @@ import { sakinTheme } from '../theme';
 import { PushSetupError } from '../domain/push';
 import { PushSettings } from './PushSettings';
 import { usePushResponses } from './usePushResponses';
+import { OpenSource } from './OpenSource';
 
 const colors = sakinTheme.colors;
 type Snapshot = { status: 'loading' | 'ready' | 'unavailable' | 'expired'; projects: Project[]; inbox?: Page<InboxItem> };
@@ -39,6 +40,7 @@ function Title({ children }: { children: string }) { return <Text textStyle={{ c
 function Card({ children }: { children: ReactNode }) { return <Stack spacing={12} style={{ width: '100%', padding: 20, backgroundColor: colors.surface, borderRadius: sakinTheme.radius.card, borderWidth: 1, borderColor: colors.border }}>{children}</Stack>; }
 
 export function LiveApp() {
+  const [openSource, setOpenSource] = useState(false);
   const [accounts, setAccounts] = useState<ConnectedAccount[]>([]);
   const [snapshots, setSnapshots] = useState(new Map<string, Snapshot>());
   const [tab, setTab] = useState<Tab>('Projeler');
@@ -200,6 +202,7 @@ export function LiveApp() {
     });
   }
 
+  if (openSource) return <OpenSource onBack={() => setOpenSource(false)} />;
   return <>
     <StatusBar style="dark" />
     <Host colorScheme="light" seedColor={colors.primary} style={{ flex: 1, backgroundColor: colors.background }}>
@@ -284,6 +287,7 @@ export function LiveApp() {
             if (!alive.current) return;
             setAccounts(await connectedAccounts.list()); void refresh(account);
           })} />}
+          {(tab === 'Hesaplar' || accounts.length === 0) && <Button label="Açık kaynak ve lisans" variant="text" onPress={() => setOpenSource(true)} />}
         </>}
       </Stack></ScrollView>
     </Host>
