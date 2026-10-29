@@ -11,7 +11,7 @@ import sys
 import time
 import uuid
 from pathlib import Path
-from ios_simulator import sign_simulator_test_app
+from ios_simulator import sign_simulator_test_app, launch_simulator_app, capture_launch_diagnostics
 
 PHASE = 'itsaplan.native-contract.phase.v1'
 REPORT = 'itsaplan.native-contract.report.v1'
@@ -95,13 +95,13 @@ def main(app, fixture_file):
         command('xcrun', 'simctl', 'bootstatus', simulator, '-b')
         command('xcrun', 'simctl', 'keychain', simulator, 'add-root-cert', fixture['certificate'])
         command('xcrun', 'simctl', 'install', simulator, str(app))
-        command('xcrun', 'simctl', 'launch', simulator, bundle)
+        launch_simulator_app(simulator, bundle)
         container = Path(command('xcrun', 'simctl', 'get_app_container', simulator, bundle, 'data')).resolve()
         directory = container / 'Library/Application Support' / bundle / 'RCTAsyncLocalStorage_V1'
         await_value(directory, PHASE, 'stored')
         command('xcrun', 'simctl', 'io', simulator, 'screenshot', str(OUTPUT / '01-sessions-stored.png'))
         command('xcrun', 'simctl', 'terminate', simulator, bundle)
-        command('xcrun', 'simctl', 'launch', simulator, bundle)
+        launch_simulator_app(simulator, bundle)
         raw = await_value(directory, REPORT)
         result.update(validated_report(raw))
         await_value(directory, PHASE, 'interactive')
@@ -109,12 +109,13 @@ def main(app, fixture_file):
         # Launch the actual product app after contract completion; this screenshot
         # is an observation, not an assertion of UI interaction/accessibility.
         command('xcrun', 'simctl', 'terminate', simulator, bundle)
-        command('xcrun', 'simctl', 'launch', simulator, bundle)
+        launch_simulator_app(simulator, bundle)
         time.sleep(5)
         command('xcrun', 'simctl', 'io', simulator, 'screenshot', str(OUTPUT / '03-product-app-observation.png'))
         result['status'] = 'passed'
     finally:
         if result['status'] != 'passed':
+            capture_launch_diagnostics(simulator, bundle, OUTPUT)
             try:
                 command('xcrun', 'simctl', 'io', simulator, 'screenshot', str(OUTPUT / 'failure.png'))
             except subprocess.SubprocessError:

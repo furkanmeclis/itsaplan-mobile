@@ -6,7 +6,7 @@ import sys
 import time
 import uuid
 from pathlib import Path
-from ios_simulator import sign_simulator_test_app
+from ios_simulator import sign_simulator_test_app, launch_simulator_app, capture_launch_diagnostics
 
 OUTPUT = Path('test-results/ios-font-scale')
 KEY = 'itsaplan.font-probe.v1'
@@ -51,14 +51,14 @@ def main(app):
         command('xcrun', 'simctl', 'bootstatus', simulator, '-b')
         command('xcrun', 'simctl', 'install', simulator, str(app))
         command('xcrun', 'simctl', 'ui', simulator, 'content_size', 'large')
-        command('xcrun', 'simctl', 'launch', simulator, bundle)
+        launch_simulator_app(simulator, bundle)
         container = Path(command('xcrun', 'simctl', 'get_app_container', simulator, bundle, 'data'))
         storage = container / 'Library/Application Support' / bundle / 'RCTAsyncLocalStorage_V1'
         normal = measurement(storage, False)
         command('xcrun', 'simctl', 'io', simulator, 'screenshot', str(OUTPUT / '01-normal.png'))
         command('xcrun', 'simctl', 'terminate', simulator, bundle)
         command('xcrun', 'simctl', 'ui', simulator, 'content_size', 'accessibility-extra-extra-extra-large')
-        command('xcrun', 'simctl', 'launch', simulator, bundle)
+        launch_simulator_app(simulator, bundle)
         large = measurement(storage, True)
         if large['width'] <= normal['width'] or large['height'] <= normal['height']:
             raise AssertionError('Shared universal text did not grow in both native dimensions')
@@ -66,6 +66,7 @@ def main(app):
         report.update(status='passed', normal=normal, accessibilityMaximum=large)
     finally:
         if report['status'] != 'passed':
+            capture_launch_diagnostics(simulator, bundle, OUTPUT)
             subprocess.run(['xcrun', 'simctl', 'io', simulator, 'screenshot', str(OUTPUT / 'failure.png')], capture_output=True)
         (OUTPUT / 'report.json').write_text(json.dumps(report, indent=2) + '\n')
         subprocess.run(['xcrun', 'simctl', 'shutdown', simulator], capture_output=True)

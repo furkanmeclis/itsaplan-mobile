@@ -27,6 +27,9 @@ class SimulatorSigningBoundary(unittest.TestCase):
             with patch('ios_simulator.subprocess.run', side_effect=signing) as run:
                 sign_simulator_test_app(app)
                 self.assertEqual(run.call_count, 3)
-            identity = 'IPMTEST001.software.example.mobile.contracttest'
+            identity = 'software.example.mobile.contracttest'
             self.assertEqual(entitlements[0]['application-identifier'], identity)
             self.assertEqual(entitlements[0]['keychain-access-groups'], [identity])
+            self.assertTrue(entitlements[0]['get-task-allow'])
+            self.assertNotIn('com.apple.developer.team-identifier', entitlements[0])
+            self.assertIn('--generate-entitlement-der', run.call_args_list[1].args[0])
