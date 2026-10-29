@@ -318,7 +318,7 @@ jobs:
             -configuration Release -sdk iphonesimulator \
             -destination 'generic/platform=iOS Simulator' \
             -derivedDataPath ios/build -jobs 3 CODE_SIGNING_ALLOWED=NO \
-            PRODUCT_BUNDLE_IDENTIFIER="$bundle_id"
+            PRODUCT_BUNDLE_IDENTIFIER="$bundle_id" ARCHS="$(uname -m)" ONLY_ACTIVE_ARCH=YES
           python3 integration/ios-native-contract.py \
             "ios/build/Build/Products/Release-iphonesimulator/$scheme.app" \
             "$RUNNER_TEMP/ipm-native/state.json"
@@ -334,7 +334,7 @@ jobs:
             -configuration Release -sdk iphonesimulator \
             -destination 'generic/platform=iOS Simulator' \
             -derivedDataPath ios/build -jobs 3 CODE_SIGNING_ALLOWED=NO \
-            PRODUCT_BUNDLE_IDENTIFIER="$bundle_id"
+            PRODUCT_BUNDLE_IDENTIFIER="$bundle_id" ARCHS="$(uname -m)" ONLY_ACTIVE_ARCH=YES
           python3 integration/ios-font-scale.py "ios/build/Build/Products/Release-iphonesimulator/$scheme.app"
       - uses: actions/upload-artifact@v4
         if: always()
