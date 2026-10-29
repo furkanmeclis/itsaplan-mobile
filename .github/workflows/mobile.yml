@@ -29,7 +29,7 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - name: Verify UI evidence freshness regression
-        run: python3 -m unittest discover -s integration -p 'test_android_ui_smoke.py'
+        run: python3 -m unittest discover -s integration -p 'test_*.py'
       - run: npm ci --prefix services/push
       - run: npm run typecheck --prefix services/push
       - run: npm test --prefix services/push
@@ -91,6 +91,18 @@ jobs:
     timeout-minutes: 60
     env:
       CI: '1'
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 127.0.0.1:5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -137,6 +149,59 @@ jobs:
           path: android/app/build/outputs/apk/release/*.apk
           if-no-files-found: error
           retention-days: 14
+
+      - uses: actions/checkout@v4
+        with:
+          repository: croffasia/itsaplan
+          ref: 73aadf9945ec4c8a23c749fb4f4dee25b036acb3
+          path: .upstream
+          persist-credentials: false
+      - run: npm ci --prefix services/push
+      - name: Install pinned upstream Bun runtime
+        run: npm install --prefix "$RUNNER_TEMP/ipm-tools" bun@1.4.3 --no-audit --no-fund
+      - name: Install upstream dependencies from lockfile
+        working-directory: .upstream
+        run: '"$RUNNER_TEMP/ipm-tools/node_modules/.bin/bun" install --frozen-lockfile'
+      - name: Start disposable native HTTPS account fixtures
+        run: |
+          UPSTREAM_ROOT="$GITHUB_WORKSPACE/.upstream" \
+          BUN_BINARY="$RUNNER_TEMP/ipm-tools/node_modules/.bin/bun" \
+          UPSTREAM_DB_URL=postgres://postgres@127.0.0.1:5432/postgres \
+          NATIVE_FIXTURE_DIR="$RUNNER_TEMP/ipm-native" \
+          node integration/run.mjs --serve-native > "$RUNNER_TEMP/ipm-native-startup.log" 2>&1 &
+          node integration/wait-native-fixture.mjs "$RUNNER_TEMP/ipm-native/state.json"
+      - name: Prepare test-only package with localhost trust
+        run: node integration/prepare-native-contract.mjs "$RUNNER_TEMP/ipm-native/state.json"
+      - name: Build isolated native account contract APK
+        working-directory: android
+        run: ./gradlew assembleRelease -PreactNativeArchitectures=x86_64 -Porg.gradle.java.installations.fromEnv=JAVA_HOME_17_X64,JAVA_HOME_21_X64 --max-workers=2 --stacktrace
+      - name: Verify pilot and test APK isolation
+        run: python3 integration/check-native-artifacts.py "$RUNNER_TEMP/ipm-native/build.json" android/app/build/outputs/apk/release/app-release.apk
+      - name: Release build memory before the emulator
+        working-directory: android
+        run: ./gradlew --stop
+      - name: Allow the hosted runner to use KVM
+        run: sudo chmod 666 /dev/kvm
+      - name: Verify native sessions, secure storage and unavailable-server isolation
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          disable-animations: true
+          emulator-boot-timeout: 600
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          script: python3 integration/android-native-contract.py android/app/build/outputs/apk/release/app-release.apk "$RUNNER_TEMP/ipm-native/state.json"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mobile-android-native-account-evidence
+          path: test-results/native-contract/
+          if-no-files-found: warn
+          retention-days: 14
+      - name: Stop disposable native account fixtures
+        if: always()
+        run: node integration/stop-native-fixture.mjs "$RUNNER_TEMP/ipm-native/state.json"
 
   android-ui:
     name: Android emulator UI and screenshot evidence

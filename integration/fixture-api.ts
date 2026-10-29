@@ -1,9 +1,7 @@
 import assert from 'node:assert/strict';
 import { sessionCookie, type Credential, type Project } from '../src/api/client';
-
-export const servers = ['https://localhost:34561', 'https://localhost:34562'];
-export const webOrigin = 'https://localhost:3400';
-export const password = 'Disposable-test-password-123';
+import { servers, webOrigin, password } from './native-contract-config';
+export { servers, webOrigin, password };
 
 export async function waitForServers(): Promise<void> {
   for (const server of servers) {

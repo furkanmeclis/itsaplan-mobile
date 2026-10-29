@@ -1,8 +1,11 @@
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync, openSync, closeSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, renameSync, rmSync, writeFileSync, openSync, closeSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { randomBytes, randomUUID } from 'node:crypto';
+import { fixtureEnvironment } from './fixture-environment.mjs';
+
+const testEnvironment = fixtureEnvironment(process.env);
 
 const root = resolve(process.env.UPSTREAM_ROOT ?? '/tmp/itsaplan-upstream');
 const bun = process.env.BUN_BINARY ?? 'bun';
@@ -25,25 +28,33 @@ const names = ['a', 'b', 'gateway'].map((suffix) => `ipm_${randomBytes(6).toStri
 const controlKey = randomBytes(32).toString('hex');
 const tenantA = randomUUID(); const tenantB = randomUUID();
 const tenantKeyA = randomBytes(32).toString('base64url'); const tenantKeyB = randomBytes(32).toString('base64url');
-const postgresModule = spawnSync(bun, ['-e', `console.log(require.resolve('postgres', { paths: [${JSON.stringify(join(root, 'packages/db'))}] }))`], { encoding: 'utf8' });
+const postgresModule = spawnSync(bun, ['-e', `console.log(require.resolve('postgres', { paths: [${JSON.stringify(join(root, 'packages/db'))}] }))`], { encoding: 'utf8', env: testEnvironment });
 if (postgresModule.status !== 0) throw new Error('Upstream dependencies are not installed.');
 const postgresPath = postgresModule.stdout.trim();
 
 function run(command, args, options = {}) {
-  const result = spawnSync(command, args, { stdio: 'inherit', ...options });
+  const result = spawnSync(command, args, { stdio: 'inherit', env: testEnvironment, ...options });
   if (result.status !== 0) throw new Error('Integration prerequisite failed.');
 }
 function sql(statement) {
   const script = join(temporary, 'database.mjs');
   writeFileSync(script, `import postgres from ${JSON.stringify(postgresPath)}; const sql=postgres(process.env.UPSTREAM_DB_URL);try{await sql.unsafe(${JSON.stringify(statement)});}finally{await sql.end();}`);
-  run(bun, [script], { env: { ...process.env, UPSTREAM_DB_URL: database } });
+  run(bun, [script], { env: { ...testEnvironment, UPSTREAM_DB_URL: database } });
+}
+function nativeState(state) {
+  writeFileSync(join(nativeDirectory, 'state.tmp'), JSON.stringify(state), { mode: 0o600 });
+  renameSync(join(nativeDirectory, 'state.tmp'), join(nativeDirectory, 'state.json'));
 }
 
 try {
+  if (nativeMode) {
+    mkdirSync(nativeDirectory, { recursive: true, mode: 0o700 });
+    nativeState({ ready: false, controllerPid: process.pid });
+  }
   run('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-keyout', key, '-out', certificate, '-days', '1', '-subj', '/CN=localhost', '-addext', 'subjectAltName=DNS:localhost,IP:127.0.0.1'], { stdio: 'ignore' });
   sql(`CREATE DATABASE ${names[2]}`);
   const gatewayDb = new URL(database); gatewayDb.pathname = `/${names[2]}`;
-  const sharedEnvironment = { ...process.env, NODE_EXTRA_CA_CERTS: certificate, TEST_CERT: certificate, TEST_KEY: key, TEST_CONTROL_KEY: controlKey };
+  const sharedEnvironment = { ...testEnvironment, NODE_EXTRA_CA_CERTS: certificate, TEST_CERT: certificate, TEST_KEY: key, TEST_CONTROL_KEY: controlKey };
   const gatewayLog = openSync(join(temporary, 'gateway.log'), 'w', 0o600);
   servers.push(spawn(bun, [resolve('integration/gateway.mjs')], { env: { ...sharedEnvironment, GATEWAY_DATABASE_URL: gatewayDb.href,
     GATEWAY_ENCRYPTION_KEY: randomBytes(32).toString('base64'), TEST_TENANT_A: tenantA, TEST_TENANT_B: tenantB,
@@ -67,15 +78,15 @@ try {
     closeSync(log); servers.push(server);
   }
   if (nativeMode) {
-    run(process.execPath, ['--import', 'tsx', 'integration/native-fixture-seed.ts'], { env: { ...process.env, NODE_EXTRA_CA_CERTS: certificate } });
+    run(process.execPath, ['--import', 'tsx', 'integration/native-fixture-seed.ts'], { env: { ...testEnvironment, NODE_EXTRA_CA_CERTS: certificate } });
     mkdirSync(nativeDirectory, { recursive: true, mode: 0o700 });
-    writeFileSync(join(nativeDirectory, 'state.json'), JSON.stringify({ controllerPid: process.pid, certificate, servers: ['https://localhost:34561', 'https://localhost:34562'],
-      serverPids: servers.slice(1).map((server) => server.pid) }), { mode: 0o600 });
+    nativeState({ ready: true, controllerPid: process.pid, certificate, servers: ['https://localhost:34561', 'https://localhost:34562'],
+      serverPids: servers.slice(1).map((server) => server.pid) });
     console.log('Disposable native HTTPS fixtures ready.');
     await nativeStopped;
   } else {
     const result = spawnSync(process.execPath, ['--import', 'tsx', '--test', '--test-isolation=none', 'integration/upstream.test.ts'], {
-      stdio: 'inherit', env: { ...process.env, NODE_EXTRA_CA_CERTS: certificate },
+      stdio: 'inherit', env: { ...testEnvironment, NODE_EXTRA_CA_CERTS: certificate },
     });
     process.exitCode = result.status ?? 1;
     if (process.exitCode === 0) {
@@ -89,7 +100,7 @@ try {
     }
   }
 } finally {
-  for (const server of servers) server.kill('SIGTERM');
+  for (const server of servers) { try { server.kill('SIGCONT'); } catch {} server.kill('SIGTERM'); }
   await Promise.all(servers.map((server) => new Promise((done) => { if (server.exitCode !== null || server.signalCode !== null) done(); else server.once('exit', done); })));
   for (const name of names) { try { sql(`DROP DATABASE IF EXISTS ${name} WITH (FORCE)`); } catch { process.exitCode = 1; } }
   rmSync(temporary, { recursive: true, force: true });

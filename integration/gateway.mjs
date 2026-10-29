@@ -4,6 +4,9 @@ import { encryptionKey, hashKey } from '../services/push/src/security.ts';
 import { gatewayHandler } from '../services/push/src/gateway.ts';
 import { gatewayTick } from '../services/push/src/gateway-worker.ts';
 
+import { assertNoOperatorCredentials } from './fixture-environment.mjs';
+
+assertNoOperatorCredentials(process.env);
 const sql = database(process.env.GATEWAY_DATABASE_URL);
 await migrate(sql, 'gateway');
 await sql`CREATE TABLE push_test_control(mode text NOT NULL)`;
