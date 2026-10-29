@@ -11,6 +11,7 @@ import sys
 import time
 import uuid
 from pathlib import Path
+from ios_simulator import sign_simulator_test_app
 
 PHASE = 'itsaplan.native-contract.phase.v1'
 REPORT = 'itsaplan.native-contract.report.v1'
@@ -58,6 +59,9 @@ def validated_report(raw):
 def await_value(directory, key, expected=None, timeout=180):
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
+        phase = stored_value(directory, PHASE)
+        if phase and phase.startswith('failed:'):
+            raise AssertionError('Native iOS contract reported failure; inspect redacted screenshot')
         value = stored_value(directory, key)
         if value is not None and (expected is None or value == expected):
             return value
@@ -81,6 +85,7 @@ def main(app, fixture_file):
     runtimes = json.loads(command('xcrun', 'simctl', 'list', 'runtimes', '--json'))['runtimes']
     runtime = next(r['identifier'] for r in reversed(runtimes) if r['isAvailable'] and '.iOS-' in r['identifier'])
     # A new simulator is the sole trust/data boundary. Never target a user's booted device.
+    sign_simulator_test_app(app)
     simulator = command('xcrun', 'simctl', 'create', 'IPM-contract-' + uuid.uuid4().hex[:8], model, runtime)
     OUTPUT.mkdir(parents=True, exist_ok=True)
     result = {'status': 'failed', 'physicalDevice': False, 'providerDelivery': False,

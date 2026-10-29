@@ -6,6 +6,7 @@ import sys
 import time
 import uuid
 from pathlib import Path
+from ios_simulator import sign_simulator_test_app
 
 OUTPUT = Path('test-results/ios-font-scale')
 KEY = 'itsaplan.font-probe.v1'
@@ -41,6 +42,7 @@ def main(app):
     model = next(d['identifier'] for d in types if d['name'].startswith('iPhone 17') and 'Pro' not in d['name'])
     runtimes = json.loads(command('xcrun', 'simctl', 'list', 'runtimes', '--json'))['runtimes']
     runtime = next(r['identifier'] for r in reversed(runtimes) if r['isAvailable'] and '.iOS-' in r['identifier'])
+    sign_simulator_test_app(app)
     simulator = command('xcrun', 'simctl', 'create', 'IPM-font-' + uuid.uuid4().hex[:8], model, runtime)
     OUTPUT.mkdir(parents=True, exist_ok=True)
     report = {'status': 'failed', 'physicalDevice': False, 'screenReaderTested': False, 'fullScreenLayoutTested': False}

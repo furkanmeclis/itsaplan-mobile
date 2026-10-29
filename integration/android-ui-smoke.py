@@ -67,7 +67,10 @@ def capture(name, data):
 
 def tap(root, label):
     parents = {child: parent for parent in root.iter() for child in parent}
-    target = next((node for node in root.iter("node") if any(label in node.get(key, "") for key in ("text", "content-desc"))), None)
+    nodes = list(root.iter("node"))
+    target = next((node for node in nodes if any(label == node.get(key, "") for key in ("text", "content-desc"))), None)
+    if target is None:
+        target = next((node for node in nodes if any(label in node.get(key, "") for key in ("text", "content-desc"))), None)
     if target is None:
         raise AssertionError("Missing control: " + label)
     current = target

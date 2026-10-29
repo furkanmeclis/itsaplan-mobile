@@ -130,7 +130,8 @@ function NativeContractRoot() {
       else if (result.phase === 'stored') setState('NATIVE_CONTRACT_STORAGE_READY');
       else { setReport(result.report ?? ''); setState('NATIVE_CONTRACT_PASSED'); }
     }).catch((error: unknown) => {
-      const code = error instanceof ContractFailure ? error.message : error instanceof ApiError ? `api_${error.code}` : 'native_operation_failed';
+      const code = error instanceof ContractFailure ? error.message : error instanceof ApiError ? `api_${error.code}` : error instanceof Error && /required entitlement/i.test(error.message) ? 'keychain_entitlement_missing' : error && typeof error === 'object' && 'code' in error && typeof error.code === 'string' && /^ERR_[A-Z_]{1,64}$/.test(error.code) ? error.code : 'native_operation_failed';
+      void AsyncStorage.setItem(phaseKey, `failed:${code}`).catch(() => {});
       if (live) { setReport(code); setState('NATIVE_CONTRACT_FAILED'); }
     });
     return () => { live = false; };

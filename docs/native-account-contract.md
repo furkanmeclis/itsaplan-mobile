@@ -103,3 +103,10 @@ in its own disposable simulator. Only public numeric measurements and PNGs are
 exported as `mobile-ios-font-scale-evidence`. This is a component measurement,
 not a full-screen Dynamic Type, VoiceOver, keyboard or physical-device acceptance.
 Check the actual run before calling this native measurement successful.
+
+The private simulator test apps receive a local ad-hoc code signature with a
+CI-only application/keychain group (`IPMTEST001`). This uses `codesign --sign -`,
+not an Apple Developer identity, provisioning profile or provider key. The normal
+uploaded simulator compile artifact stays unsigned. The signer refuses pilot
+bundle identifiers. A native Keychain failure remains a failed test; it is never
+substituted with an in-memory or file-backed credential store.
