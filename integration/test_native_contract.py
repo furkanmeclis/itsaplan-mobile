@@ -7,6 +7,7 @@ import tempfile
 import unittest
 import xml.etree.ElementTree as ET
 import zipfile
+from unittest.mock import patch
 from pathlib import Path
 
 PREPARE = Path(__file__).with_name("prepare-native-contract.mjs").resolve()
@@ -111,3 +112,15 @@ assert.throws(() => assertNoOperatorCredentials(original));
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class FocusedKeyboardField(unittest.TestCase):
+    def test_observed_clipped_password_field_is_not_treated_as_fully_visible(self):
+        spec = importlib.util.spec_from_file_location('native_driver', Path(__file__).with_name('android-native-contract.py'))
+        driver = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(driver)
+        clipped = ET.fromstring('<hierarchy><node class="android.widget.EditText" focused="true" bounds="[61,325][259,357]"/></hierarchy>')
+        complete = ET.fromstring('<hierarchy><node class="android.widget.EditText" focused="true" bounds="[61,325][259,373]"/></hierarchy>')
+        with patch.object(driver.smoke, 'keyboard_frame', return_value=(0,381,320,640)):
+            self.assertFalse(driver.focused_field_is_visible(clipped, 48))
+            self.assertTrue(driver.focused_field_is_visible(complete, 48))

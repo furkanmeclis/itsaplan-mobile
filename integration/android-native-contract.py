@@ -24,14 +24,41 @@ def safe_capture(name, data):
     return True
 
 
+
+def scroll_to_top(display):
+    for attempt in range(13):
+        root, data = smoke.hierarchy()
+        if smoke.visible_label(root, "It’s a Plan", display):
+            return root, data
+        if attempt < 12:
+            smoke.adb("shell", "input", "swipe", str(display[0] // 2), str(int(display[1] * .4)),
+                      str(display[0] // 2), str(int(display[1] * .8)), "400")
+            time.sleep(.5)
+    raise AssertionError("Product account list could not return to its top")
+
+
+def focused_field_is_visible(root, minimum_height):
+    frame = smoke.keyboard_frame()
+    if frame is None:
+        return False
+    for node in root.iter("node"):
+        if node.get("focused") != "true" or node.get("class") != "android.widget.EditText":
+            continue
+        bounds = list(map(int, re.findall(r"-?\d+", node.get("bounds", ""))))
+        if len(bounds) == 4 and bounds[3] - bounds[1] >= minimum_height and bounds[3] <= frame[1]:
+            return True
+    return False
+
+
 def enter_field(label, value, display, secret=False):
     root, data = smoke.scroll_to_label(label, display, ready=lambda root: smoke.control_within_scroll_view(root, label))
+    minimum_height = smoke.label_height(root, label)
     smoke.tap(root, label)
     try:
         smoke.adb("shell", "input", "text", value)
     except subprocess.SubprocessError:
         raise AssertionError("Native form input command failed") from None
-    root, data = smoke.wait_ui([], ready=lambda root: smoke.keyboard_frame() is not None)
+    root, data = smoke.wait_ui([], ready=lambda root: focused_field_is_visible(root, minimum_height))
     if secret:
         if value.encode() in data or not any(node.get("password") == "true" and node.get("focused") == "true" for node in root.iter("node")):
             raise AssertionError("Native password field did not mask its value")
@@ -134,7 +161,8 @@ def main(apk, fixture_file):
         enter_field("Parola", CONFIG["password"], display, secret=True)
         root, data = smoke.scroll_to_label("Giriş yap", display, ready=lambda root: smoke.control_within_scroll_view(root, "Giriş yap"))
         smoke.tap(root, "Giriş yap")
-        root, data = smoke.wait_ui(["Partner"], timeout=30)
+        scroll_to_top(display)
+        root, data = smoke.scroll_to_label("Partner", display)
         safe_capture("07-native-product-login", data)
         result["checks"].append("product login form masks the fixture password and authenticates another same-host account")
         paused = fixture["serverPids"][0]
