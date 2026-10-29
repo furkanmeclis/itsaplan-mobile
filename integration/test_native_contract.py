@@ -1,5 +1,6 @@
 """Check test-only TLS/material isolation before native build jobs."""
 import hashlib
+import importlib.util
 import json
 import subprocess
 import tempfile
@@ -69,6 +70,23 @@ class IsolatedContractBuild(unittest.TestCase):
                 self.assertNotIn(b"BEGIN PRIVATE KEY", result.stdout + result.stderr)
                 self.assertFalse((self.root / "android/app/src/main/res/raw/ipm_ci_ca.pem").exists())
         self.assertEqual((self.root / "android/app/build.gradle").read_text(), "// generated pilot project\n")
+
+
+class OptimizedResourceBoundary(unittest.TestCase):
+    def test_renamed_certificate_is_found_by_bytes_and_tampered_material_is_not(self):
+        spec = importlib.util.spec_from_file_location('artifact_boundary', Path(__file__).with_name('check-native-artifacts.py'))
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        with tempfile.TemporaryDirectory() as temporary:
+            apk = Path(temporary) / 'optimized.apk'
+            certificate = b'public disposable test certificate fixture'
+            digest = hashlib.sha256(certificate).hexdigest()
+            with zipfile.ZipFile(apk, 'w') as archive:
+                archive.writestr('res/Ab.pem', certificate)
+                archive.writestr('res/raw/ipm_ci_ca.pem', b'different certificate')
+            with zipfile.ZipFile(apk) as archive:
+                self.assertEqual(module.matching_resources(archive, digest), ['res/Ab.pem'])
+                self.assertEqual(module.matching_resources(archive, hashlib.sha256(b'tampered').hexdigest()), [])
 
 
 class FixtureCredentialBoundary(unittest.TestCase):
