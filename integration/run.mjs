@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync, openSync, closeSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync, openSync, closeSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
@@ -6,6 +6,15 @@ import { randomBytes, randomUUID } from 'node:crypto';
 
 const root = resolve(process.env.UPSTREAM_ROOT ?? '/tmp/itsaplan-upstream');
 const bun = process.env.BUN_BINARY ?? 'bun';
+const nativeMode = process.argv.includes('--serve-native');
+if (nativeMode && !process.env.NATIVE_FIXTURE_DIR) throw new Error('Native fixture directory is required.');
+const nativeDirectory = nativeMode ? resolve(process.env.NATIVE_FIXTURE_DIR) : null;
+let stopNative;
+const nativeStopped = nativeMode ? new Promise((done) => { stopNative = done; }) : null;
+if (nativeMode) {
+  process.once('SIGTERM', () => stopNative());
+  process.once('SIGINT', () => stopNative());
+}
 const temporary = mkdtempSync(join(tmpdir(), 'ipm-upstream-'));
 const servers = [];
 const certificate = join(temporary, 'cert.pem');
@@ -57,22 +66,32 @@ try {
     const server = spawn(bun, [resolve('integration/server.mjs')], { cwd: root, env: environment, stdio: ['ignore', log, log] });
     closeSync(log); servers.push(server);
   }
-  const result = spawnSync(process.execPath, ['--import', 'tsx', '--test', '--test-isolation=none', 'integration/upstream.test.ts'], {
-    stdio: 'inherit', env: { ...process.env, NODE_EXTRA_CA_CERTS: certificate },
-  });
-  process.exitCode = result.status ?? 1;
-  if (process.exitCode === 0) {
-    const dbA = new URL(database); dbA.pathname = `/${names[0]}`;
-    const dbB = new URL(database); dbB.pathname = `/${names[1]}`;
-    const pushTest = spawnSync(process.execPath, ['--import', 'tsx', '--test', '--test-isolation=none', 'integration/push.test.ts'], {
-      cwd: resolve('services/push'), stdio: 'inherit', env: { ...sharedEnvironment, PUSH_TEST_DB_A: dbA.href, PUSH_TEST_DB_B: dbB.href, PUSH_TEST_GATEWAY_DB: gatewayDb.href,
-        TEST_TENANT_KEY_A: tenantKeyA, TEST_TENANT_KEY_B: tenantKeyB },
+  if (nativeMode) {
+    run(process.execPath, ['--import', 'tsx', 'integration/native-fixture-seed.ts'], { env: { ...process.env, NODE_EXTRA_CA_CERTS: certificate } });
+    mkdirSync(nativeDirectory, { recursive: true, mode: 0o700 });
+    writeFileSync(join(nativeDirectory, 'state.json'), JSON.stringify({ controllerPid: process.pid, certificate, servers: ['https://localhost:34561', 'https://localhost:34562'],
+      serverPids: servers.slice(1).map((server) => server.pid) }), { mode: 0o600 });
+    console.log('Disposable native HTTPS fixtures ready.');
+    await nativeStopped;
+  } else {
+    const result = spawnSync(process.execPath, ['--import', 'tsx', '--test', '--test-isolation=none', 'integration/upstream.test.ts'], {
+      stdio: 'inherit', env: { ...process.env, NODE_EXTRA_CA_CERTS: certificate },
     });
-    process.exitCode = pushTest.status ?? 1;
+    process.exitCode = result.status ?? 1;
+    if (process.exitCode === 0) {
+      const dbA = new URL(database); dbA.pathname = `/${names[0]}`;
+      const dbB = new URL(database); dbB.pathname = `/${names[1]}`;
+      const pushTest = spawnSync(process.execPath, ['--import', 'tsx', '--test', '--test-isolation=none', 'integration/push.test.ts'], {
+        cwd: resolve('services/push'), stdio: 'inherit', env: { ...sharedEnvironment, PUSH_TEST_DB_A: dbA.href, PUSH_TEST_DB_B: dbB.href, PUSH_TEST_GATEWAY_DB: gatewayDb.href,
+          TEST_TENANT_KEY_A: tenantKeyA, TEST_TENANT_KEY_B: tenantKeyB },
+      });
+      process.exitCode = pushTest.status ?? 1;
+    }
   }
 } finally {
   for (const server of servers) server.kill('SIGTERM');
-  await Promise.all(servers.map((server) => new Promise((done) => { if (server.exitCode !== null) done(); else server.once('exit', done); })));
+  await Promise.all(servers.map((server) => new Promise((done) => { if (server.exitCode !== null || server.signalCode !== null) done(); else server.once('exit', done); })));
   for (const name of names) { try { sql(`DROP DATABASE IF EXISTS ${name} WITH (FORCE)`); } catch { process.exitCode = 1; } }
   rmSync(temporary, { recursive: true, force: true });
+  if (nativeDirectory) rmSync(join(nativeDirectory, 'state.json'), { force: true });
 }
