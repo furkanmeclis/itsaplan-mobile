@@ -49,8 +49,13 @@ export class ConnectedAccounts {
         await this.vault.save(account, JSON.stringify(credential));
         await this.index.write(JSON.stringify([...accounts.filter((item) => accountKey(item) !== key), account]));
       } catch (error) {
-        if (previousCredential) await this.vault.save(account, previousCredential);
-        else await this.vault.disconnect(account, async () => {});
+        try {
+          if (previousCredential) await this.vault.save(account, previousCredential);
+          else await this.vault.disconnect(account, async () => {});
+        } catch {
+          // Local storage can remain unavailable during rollback. Still revoke
+          // the new remote session and preserve the original persistence error.
+        }
         await this.client.signOut(account, credential).catch(() => {});
         throw error;
       }
