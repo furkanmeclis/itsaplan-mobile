@@ -9,7 +9,11 @@ third-party package licenses remain applicable. This document does not relicense
 those components or assert rights beyond their original licenses.
 
 The account-entry/account-settings screen links to the public source, AGPL text,
-this document and the upstream project. A repository link to `main` is a way to
+this document and the upstream project. CI builds embed their validated 40-character
+GitHub source revision and link directly to that commit and its source archive;
+local builds without a revision explicitly show a repository link instead.
+Forks must update `sourceRepository` in `src/domain/source.ts` to their public
+corresponding source before distributing a modified build. A repository link to `main` is a way to
 find source, not a claim that its latest commit matches every distributed binary.
 For each distributed binary, retain the exact source revision and corresponding
 build instructions, dependency locks, modifications and required notices. The
