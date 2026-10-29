@@ -63,6 +63,7 @@ The current PR implements isolated native sessions and API contract checks,
 transactional upstream inbox hooks, device registration/revocation, gateway
 authentication and PostgreSQL delivery queues. Real upstream HTTPS contract tests
 and provider-boundary tests pass. Native session persistence and actual APNs/FCM
-delivery require physical-device acceptance. No operator-owned live server or
-provider credentials have been supplied; no real push has been sent. See
+delivery require physical-device acceptance. An operator-owned live server passed API-key REST/MCP and isolated task/state/
+comment wire checks. Native cookie login on that server, provider credentials
+and actual device delivery remain unverified; no real push has been sent. See
 `services/push/README.md` and `docs/device-testing.md`.

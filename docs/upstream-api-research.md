@@ -4,7 +4,9 @@ Inspected `croffasia/itsaplan` at
 `73aadf9945ec4c8a23c749fb4f4dee25b036acb3` on 2026-10-28. This is source-level
 research. A follow-up [live account implementation and test](live-accounts.md)
 uses two disposable local instances of this upstream commit over verified HTTPS.
-No operator-owned production server has been supplied or authenticated.
+An operator-owned live server also passed API-key REST/MCP and isolated
+project/task/state/comment wire checks. This operator transport does not establish
+native cookie authentication or physical-device behavior.
 
 ## Native authentication
 
@@ -89,8 +91,9 @@ notification routing IDs; no task/comment text or credential. Fetch the actual
 content from the selected server under that account's session, rechecking access.
 The gateway owns APNs/FCM sending credentials. Each delivery needs a stable
 idempotency key, signed authenticated gateway requests, bounded retry, invalid
-token cleanup and revocation checks at delivery time. No server, database or
-gateway implementation is included in this foundation delivery.
+token cleanup and revocation checks at delivery time. The implementation is in `services/push`; its real upstream queue tests use a
+provider-boundary double. The operator-owned server returned 404 for
+`/mobile/capabilities`, so its extension/gateway deployment is not established.
 
 ## Required integration evidence
 

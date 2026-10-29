@@ -112,6 +112,8 @@ debug artifacts require Metro; the Android standalone preview embeds its bundle.
 See [physical-device testing](device-testing.md). A green build does not complete real-device auth
 or push acceptance. No operator-owned production server was accessed.
 
-It’s a Plan MCP remains unavailable in this session. These files document code
-and evidence; they do not replace the existing IPM project or its acceptance
-records. Task fields must be updated through that connector when it is exposed.
+The operator API-key connection can access REST and the MCP Streamable HTTP
+endpoint. Existing IPM records contain the task/PR/CI evidence. A live isolated
+sandbox verified the PlannerClient project/task/state/comment wire contracts
+through an API-key transport; it did not exercise native cookie login or OS
+credential storage. Provider and physical-device acceptance remain open.

@@ -19,3 +19,5 @@ ios/
 secrets/
 *.p8
 google-services.json
+
+__pycache__/

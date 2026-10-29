@@ -72,7 +72,7 @@ HTTPS integration job:
 - `mobile-android-debug-apk`: Gradle debug APK for arm64 devices and x86_64 emulators.
   This development APK requires Metro (`npm start` and `adb reverse tcp:8081 tcp:8081`
   for a USB-connected Android device). It is not a standalone release binary.
-- `mobile-android-standalone-preview`: development-key signed arm64 APK with
+- `mobile-android-standalone-preview`: development-key signed arm64/x86_64 APK with
   embedded JavaScript for device testing without Metro; not store distribution.
 - `mobile-ios-simulator-app`: unsigned simulator `.app` inside a ZIP; install with
   `xcrun simctl install booted <application.app>`. Debug builds require Metro.
@@ -95,8 +95,9 @@ Local clean installation, both typechecks, 42 mobile tests, 6 service tests,
 both platform bundle exports and the real upstream integration scenarios passed. A generated native project is not a compiled
 APK or simulator application. Native CI results must be read before IPM-7 is
 accepted. Real upstream session/mutation contracts are verified by the HTTPS
-integration suite. Native UI rendering, OS session behavior and actual provider
-side/device push delivery remain unverified.
+integration suite. Android native entry/demo rendering and 1.3 font scaling passed the emulator
+check in CI 40768519614. OS session behavior and actual provider-side/device push
+delivery remain unverified.
 
 `npm audit` reports two upstream toolchain advisories affecting eight dependency
 nodes (three high, five low): Zod collection validation
@@ -107,7 +108,43 @@ No forced dependency override or Expo downgrade was applied. Recheck upstream
 fixes before production distribution; do not feed untrusted configuration to
 these developer tools.
 
-It’s a Plan MCP is unavailable in this session. Project-center documents and IPM
-evidence fields could not be read or updated. No duplicate project/backlog was
-created. Link the existing PR and actual CI/artifact results to IPM-4–8 once the
-connector is exposed.
+The operator API-key connection reaches the real MCP endpoint; project documents
+and existing IPM task/evidence fields have been updated. An isolated test team
+holds operator fixtures. It does not replace the IPM process project.
+
+
+## Android UI evidence
+
+After native builds, `android-ui` installs the matching standalone APK on an Android
+15/API 35 x86_64 emulator. Its JavaScript is embedded from the same checkout;
+no development server is used. It
+checks account entry, labeled demo navigation, return navigation and rendering
+at system font scales 1.3 and 2.0. At 2.0 it also exercises demo/return navigation
+and scrolls until the login control is fully inside its scroll viewport without
+pressing it. A positive clipped text rectangle at the viewport edge cannot pass. A separate check
+types only `https://mobile.invalid`, verifies the software keyboard is shown,
+and dismisses it with Back while preserving the field. The editable field must
+remain above the current keyboard window frame. Current window visibility and content insets exclude the IME window’s
+transparent region; historical IME show flags are not used. No login is submitted.
+Each hierarchy dump removes the previous file first;
+font-scale evidence must expose larger text width and height, and regression tests prevent
+stale UI labels from being accepted after a failed dump. `mobile-android-ui-evidence` contains PNG screenshots,
+UI hierarchy XML, a report, current window/IME diagnostics and fresh-emulator app logs. No live account is enrolled
+and no operator/provider credentials are passed to the job. A passing result is
+emulator UI evidence; it is not physical-device, VoiceOver/TalkBack, mobile auth
+or provider-delivery acceptance.
+
+Android 14+ uses [nonlinear font scaling](https://developer.android.com/about/versions/14/features#non-linear-font-scaling):
+a heading can grow less than 10% in height at font scale 1.3. The check requires
+actual growth in both dimensions and the requested system setting, rather than
+a fixed percentage. At scale 2.0 text may wrap, so heading height must exceed
+the 1.3 height and visible bounds/navigation are verified instead of requiring
+unwrapped width growth. The common Expo UI header stacks vertically when
+font-adjusted window width is below 250 dp. Physical-device and screen-reader
+acceptance remain separate work.
+
+The app uses one React Native KeyboardAvoidingView around its safe-area content
+with padding behavior on both platforms. This gives the Expo UI scrollable form
+room above the software keyboard. Android emulator verification must establish
+that the focused URL field remains above the actual IME window; iOS physical
+keyboard behavior remains separate acceptance.

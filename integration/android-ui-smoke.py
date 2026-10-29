@@ -1,0 +1,295 @@
+"""Exercise the real Android UI with local demo data; never enroll an account."""
+import json
+import re
+import subprocess
+import sys
+import time
+import xml.etree.ElementTree as ET
+import zipfile
+from pathlib import Path
+
+PACKAGE = "software.technowide.itsaplan.mobile"
+OUTPUT = Path("test-results/android-ui")
+RECOVERIES = []
+
+
+def adb(*args, timeout=30):
+    return subprocess.run(["adb", *args], check=True, capture_output=True, timeout=timeout).stdout
+
+
+def hierarchy():
+    # A failed dump can exit successfully while leaving a previous window file behind.
+    adb("shell", "rm", "-f", "/sdcard/ipm-window.xml")
+    adb("shell", "uiautomator", "dump", "/sdcard/ipm-window.xml")
+    data = adb("exec-out", "cat", "/sdcard/ipm-window.xml")
+    return ET.fromstring(data), data
+
+
+def text_values(root):
+    return [node.get(key, "") for node in root.iter("node") for key in ("text", "content-desc")]
+
+
+def wait_ui(labels, timeout=180, ready=None):
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        try:
+            root, data = hierarchy()
+            # Hosted emulators occasionally show a launcher ANR over a healthy app.
+            # Handle only this exact system dialog once; app ANRs must still fail.
+            if recover_launcher(root, data):
+                continue
+            values = text_values(root)
+            if all(any(label in value for value in values) for label in labels) and (ready is None or ready(root)):
+                return root, data
+        except (subprocess.SubprocessError, ET.ParseError):
+            pass
+        time.sleep(3)
+    raise AssertionError("Native UI did not expose the expected labels: " + ", ".join(labels))
+
+
+def recover_launcher(root, data):
+    title = next((node for node in root.iter("node")
+                  if node.get("resource-id") == "android:id/alertTitle"
+                  and node.get("package") == "android"), None)
+    if title is None or title.get("text") != "Pixel Launcher isn't responding" or RECOVERIES:
+        return False
+    capture("launcher-anr", data)
+    tap(root, "Close app")
+    RECOVERIES.append("closed Pixel Launcher system ANR dialog once")
+    return True
+
+
+def capture(name, data):
+    time.sleep(1)  # Allow the matching native frame to finish drawing.
+    (OUTPUT / (name + ".xml")).write_bytes(data)
+    (OUTPUT / (name + ".png")).write_bytes(adb("exec-out", "screencap", "-p"))
+
+
+def tap(root, label):
+    parents = {child: parent for parent in root.iter() for child in parent}
+    target = next((node for node in root.iter("node") if any(label in node.get(key, "") for key in ("text", "content-desc"))), None)
+    if target is None:
+        raise AssertionError("Missing control: " + label)
+    current = target
+    while current is not None:
+        if current.get("clickable") == "true":
+            target = current
+            break
+        current = parents.get(current)
+    values = [int(value) for value in re.findall(r"\d+", target.get("bounds", ""))]
+    if len(values) != 4 or values[2] <= values[0] or values[3] <= values[1]:
+        raise AssertionError("Control has no visible touch bounds: " + label)
+    adb("shell", "input", "tap", str((values[0] + values[2]) // 2), str((values[1] + values[3]) // 2))
+
+
+def label_size(root, label):
+    node = next(node for node in root.iter("node") if label in node.get("text", "") or label in node.get("content-desc", ""))
+    values = [int(value) for value in re.findall(r"-?\d+", node.get("bounds", ""))]
+    if len(values) != 4:
+        raise AssertionError("Missing text bounds: " + label)
+    return values[2] - values[0], values[3] - values[1]
+
+
+def label_height(root, label):
+    return label_size(root, label)[1]
+
+
+def text_grew(root, label, baseline):
+    width, height = label_size(root, label)
+    # Android 14+ scales text nonlinearly: larger headings grow less than body text.
+    # Check real growth in both dimensions, not an assumed percentage of font_scale.
+    return width > baseline[0] and height > baseline[1]
+
+
+def display_size():
+    sizes = re.findall(r"(?:Physical|Override) size: (\d+)x(\d+)", adb("shell", "wm", "size").decode())
+    if not sizes:
+        raise AssertionError("Cannot read emulator display size")
+    return tuple(map(int, sizes[-1]))
+
+
+def visible_label(root, label, display):
+    for node in root.iter("node"):
+        if not any(label in node.get(key, "") for key in ("text", "content-desc")):
+            continue
+        bounds = list(map(int, re.findall(r"-?\d+", node.get("bounds", ""))))
+        if len(bounds) == 4 and 0 <= bounds[0] < bounds[2] <= display[0] and 0 <= bounds[1] < bounds[3] <= display[1]:
+            return True
+    return False
+
+
+def keyboard_frame():
+    state = adb("shell", "dumpsys", "window", "-a", "windows").decode()
+    sections = re.split(r"(?m)^\s*Window #\d+ ", state)
+    if len(sections) < 2:
+        raise AssertionError("Cannot read current Android window state")
+    for section in sections[1:]:
+        if not re.search(r"\bInputMethod\b", section.splitlines()[0]):
+            continue
+        if not re.search(r"(?m)^\s*isVisible=true\s*$", section):
+            continue
+        bounds = re.search(r"\bframe=\[(-?\d+),(-?\d+)\]\[(-?\d+),(-?\d+)\]", section)
+        if bounds is None:
+            raise AssertionError("Visible keyboard has no window frame")
+        frame = tuple(map(int, bounds.groups()))
+        insets = re.search(r"\bmGivenContentInsets=\[(-?\d+),(-?\d+)\]\[(-?\d+),(-?\d+)\]", section)
+        if insets is None:
+            raise AssertionError("Visible keyboard has no content insets")
+        left, top, right, bottom = map(int, insets.groups())
+        if min(left, top, right, bottom) < 0:
+            raise AssertionError("Keyboard content insets are invalid")
+        # IME windows include a transparent region above the visible keyboard.
+        frame = (frame[0] + left, frame[1] + top, frame[2] - right, frame[3] - bottom)
+        if frame[2] <= frame[0] or frame[3] <= frame[1]:
+            raise AssertionError("Visible keyboard has empty window frame")
+        return frame
+    return None
+
+
+def input_above_keyboard(root, label, display):
+    frame = keyboard_frame()
+    return frame is not None and visible_label(root, label, (display[0], frame[1]))
+
+
+def control_within_scroll_view(root, label):
+    parents = {child: parent for parent in root.iter() for child in parent}
+    control = next((node for node in root.iter("node") if any(label in node.get(key, "") for key in ("text", "content-desc"))), None)
+    while control is not None and control.get("clickable") != "true":
+        control = parents.get(control)
+    viewport = parents.get(control)
+    while viewport is not None and viewport.get("scrollable") != "true":
+        viewport = parents.get(viewport)
+    if control is None or viewport is None:
+        return False
+    bounds = [int(value) for value in re.findall(r"-?\d+", control.get("bounds", ""))]
+    window = [int(value) for value in re.findall(r"-?\d+", viewport.get("bounds", ""))]
+    return len(bounds) == len(window) == 4 and window[0] < bounds[0] < bounds[2] < window[2] and window[1] < bounds[1] < bounds[3] < window[3]
+
+
+def scroll_to_label(label, display, ready=None):
+    for attempt in range(11):
+        root, data = hierarchy()
+        if visible_label(root, label, display) and (ready is None or ready(root)):
+            return root, data
+        if attempt < 10:
+            adb("shell", "input", "swipe", str(display[0] // 2), str(int(display[1] * .8)),
+                str(display[0] // 2), str(int(display[1] * .4)), "400")
+            time.sleep(.5)
+    raise AssertionError("Cannot scroll to visible control: " + label)
+
+
+def launch():
+    adb("shell", "am", "force-stop", PACKAGE)
+    adb("shell", "am", "start", "-n", PACKAGE + "/.MainActivity")
+
+
+def main(apk_path):
+    OUTPUT.mkdir(parents=True, exist_ok=True)
+    report = {"platform": "android-emulator", "data": "explicitly labeled local demo", "checks": [],
+              "realAuthentication": False, "providerDelivery": False, "physicalDevice": False}
+    try:
+        apk = Path(apk_path).resolve()
+        if not apk.is_file():
+            raise AssertionError("Standalone APK missing")
+        with zipfile.ZipFile(apk) as archive:
+            if archive.getinfo("assets/index.android.bundle").file_size <= 0:
+                raise AssertionError("Standalone APK has no embedded JavaScript")
+            if not any(name.startswith("lib/x86_64/") for name in archive.namelist()):
+                raise AssertionError("Standalone APK has no emulator-native libraries")
+        adb("install", "-r", str(apk), timeout=120)
+        adb("shell", "settings", "put", "system", "font_scale", "1.0")
+        launch()
+        root, data = wait_ui(["Sunucu hesapları", "Demoyu incele", "Sunucuya bağlan"])
+        baseline = label_size(root, "Sunucuya bağlan")
+        capture("01-account-entry", data)
+        report["checks"].append("native account-entry screen rendered")
+        tap(root, "Demoyu incele")
+        root, data = wait_ui(["Örnek veriler", "ETKİLEŞİMLİ DEMO", "Gerçek hesaplara dön"])
+        capture("02-labeled-demo", data)
+        report["checks"].append("demo notice and native navigation rendered")
+        tap(root, "Gerçek hesaplara dön")
+        root, data = wait_ui(["Sunucu hesapları", "Sunucuya bağlan"])
+        capture("03-return-to-accounts", data)
+        report["checks"].append("returned to real account entry without enrolling a server")
+        adb("shell", "settings", "put", "system", "font_scale", "1.3")
+        launch()
+        root, data = wait_ui(["Sunucu hesapları", "Demoyu incele", "Sunucuya bağlan"],
+                             ready=lambda root: text_grew(root, "Sunucuya bağlan", baseline))
+        observed_scale = float(adb("shell", "settings", "get", "system", "font_scale").decode().strip())
+        scaled = label_size(root, "Sunucuya bağlan")
+        if observed_scale < 1.29 or not text_grew(root, "Sunucuya bağlan", baseline):
+            raise AssertionError("Large-font screen did not expose fresh, scaled text bounds")
+        report["fontScale"] = observed_scale
+        report["textHeightPx"] = {"normal": baseline[1], "large": scaled[1]}
+        report["textWidthPx"] = {"normal": baseline[0], "large": scaled[0]}
+        capture("04-large-font-entry", data)
+        report["checks"].append("account entry rendered at system font scale 1.3")
+
+        display = display_size()
+        adb("shell", "settings", "put", "secure", "show_ime_with_hard_keyboard", "1")
+        adb("shell", "settings", "put", "system", "font_scale", "1.0")
+        launch()
+        root, data = wait_ui(["HTTPS API adresi"])
+        tap(root, "HTTPS API adresi")
+        probe = "https://mobile.invalid"
+        adb("shell", "input", "text", probe)
+        root, data = wait_ui([probe], ready=lambda root: input_above_keyboard(root, probe, display))
+        opened_frame = keyboard_frame()
+        capture("05-url-keyboard-open", data)
+        report["checks"].append("URL field accepts reserved test address with software keyboard visible")
+        adb("shell", "input", "keyevent", "KEYCODE_BACK")
+        root, data = wait_ui([probe], ready=lambda root: keyboard_frame() is None)
+        capture("06-url-keyboard-closed", data)
+        report["checks"].append("back dismisses keyboard and preserves URL field without submitting login")
+        report["keyboard"] = {"opened": True, "dismissedWithBack": True, "frame": opened_frame,
+                              "urlAboveKeyboard": True}
+
+        adb("shell", "settings", "put", "system", "font_scale", "2.0")
+        launch()
+        root, data = wait_ui(["Sunucu hesapları", "Demoyu incele", "Sunucuya bağlan"],
+                             ready=lambda root: label_height(root, "Sunucuya bağlan") > scaled[1]
+                             and all(visible_label(root, label, display) for label in ["Sunucu hesapları", "Demoyu incele", "Sunucuya bağlan"]))
+        maximum_scale = float(adb("shell", "settings", "get", "system", "font_scale").decode().strip())
+        if maximum_scale < 1.99:
+            raise AssertionError("Maximum system font setting did not apply")
+        report["maximumFontScale"] = maximum_scale
+        report["maximumHeadingPx"] = label_size(root, "Sunucuya bağlan")
+        capture("07-maximum-font-entry", data)
+        tap(root, "Demoyu incele")
+        root, data = wait_ui(["Örnek veriler", "Gerçek hesaplara dön", "ETKİLEŞİMLİ DEMO"])
+        tap(root, "Gerçek hesaplara dön")
+        root, data = wait_ui(["Sunucu hesapları", "Sunucuya bağlan"])
+        report["checks"].append("account heading and demo/return controls remain reachable at font scale 2.0")
+        root, data = scroll_to_label("Giriş yap", display, ready=lambda root: control_within_scroll_view(root, "Giriş yap"))
+        capture("08-maximum-font-form-bottom", data)
+        report["loginControlInsideViewport"] = True
+        report["checks"].append("maximum-font account form scrolls login control fully inside viewport without submitting it")
+        report["status"] = "passed"
+    except Exception as error:
+        report["status"] = "failed"
+        report["error"] = str(error)
+        try:
+            root, data = hierarchy()
+            capture("failure", data)
+        except Exception:
+            pass
+        raise
+    finally:
+        for name, args in [("window-state.txt", ("window", "-a", "windows")), ("ime-state.txt", ("input_method",))]:
+            try:
+                (OUTPUT / name).write_bytes(adb("shell", "dumpsys", *args))
+            except Exception:
+                pass
+        try:
+            pid = adb("shell", "pidof", PACKAGE).decode().strip().split()[0]
+            if pid.isdigit():
+                (OUTPUT / "app-logcat.txt").write_bytes(adb("logcat", "-d", "--pid=" + pid))
+            adb("shell", "settings", "put", "system", "font_scale", "1.0")
+        except Exception:
+            pass
+        report["emulatorRecoveries"] = list(RECOVERIES)
+        (OUTPUT / "report.json").write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n")
+
+
+if __name__ == "__main__":
+    main(sys.argv[1])

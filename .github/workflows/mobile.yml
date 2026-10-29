@@ -28,6 +28,8 @@ jobs:
       - run: npx expo install --check
       - run: npm run typecheck
       - run: npm test
+      - name: Verify UI evidence freshness regression
+        run: python3 -m unittest discover -s integration -p 'test_android_ui_smoke.py'
       - run: npm ci --prefix services/push
       - run: npm run typecheck --prefix services/push
       - run: npm test --prefix services/push
@@ -121,7 +123,7 @@ jobs:
 
       - name: Build standalone preview for an Android device
         working-directory: android
-        run: ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a -Porg.gradle.java.installations.fromEnv=JAVA_HOME_17_X64,JAVA_HOME_21_X64 --max-workers=2 --stacktrace
+        run: ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a,x86_64 -Porg.gradle.java.installations.fromEnv=JAVA_HOME_17_X64,JAVA_HOME_21_X64 --max-workers=2 --stacktrace
       - name: Verify JavaScript is embedded in the preview APK
         run: |
           python3 - <<'PY'
@@ -133,6 +135,41 @@ jobs:
         with:
           name: mobile-android-standalone-preview
           path: android/app/build/outputs/apk/release/*.apk
+          if-no-files-found: error
+          retention-days: 14
+
+  android-ui:
+    name: Android emulator UI and screenshot evidence
+    needs: [android]
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: actions/download-artifact@v4
+        with:
+          name: mobile-android-standalone-preview
+          path: test-results/apk
+      - name: Allow the hosted runner to use KVM
+        run: sudo chmod 666 /dev/kvm
+      - name: Run native UI smoke checks on Android 15
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          disable-animations: true
+          emulator-boot-timeout: 600
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          script: python3 integration/android-ui-smoke.py test-results/apk/app-release.apk
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mobile-android-ui-evidence
+          path: test-results/android-ui/
           if-no-files-found: error
           retention-days: 14
 

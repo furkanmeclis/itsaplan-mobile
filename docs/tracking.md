@@ -4,7 +4,7 @@ Process source of truth: **It’s a Plan Mobile**, project `technowide-software.
 
 Code and PR review: https://github.com/furkanmeclis/itsaplan-mobile
 
-The project includes 5 delivery initiatives, 25 acceptance-driven issues, 7 board states, 7 saved views, 7 area labels, 6 documents, 3 task templates, and PR/build evidence URL fields. Task dependencies are recorded as blocking relations.
+The project includes 5 delivery initiatives, 25 acceptance-driven issues, 7 board states, 7 saved views, 7 area labels, 7 documents, 3 task templates, and PR/build evidence URL fields. Task dependencies are recorded as blocking relations.
 
 ## Task map
 
@@ -30,11 +30,20 @@ The extension/deployment contract is in `services/push/README.md`; physical
 acceptance steps are in `docs/device-testing.md`. A test provider boundary is
 explicitly used in the real-upstream integration suite.
 
-The current tool catalog has no It’s a Plan MCP operations, so this session
-cannot update existing task states or evidence fields. No substitute project or
-duplicate tasks were created. PR/CI evidence is retained for attaching to the
-existing IPM records when that connector becomes available.
+The operator API-key connection reaches the server’s MCP Streamable HTTP endpoint.
+Existing IPM task descriptions, states, PR/CI fields and project documents were
+updated and read back. Operator test mutations use a separate sandbox team; the
+existing IPM project remains the process source. Native cookie authentication and
+real-device push remain separate acceptance work.
 
+
+IPM-22: the Mobile workflow runs the standalone APK on an Android 15 emulator after
+native compilation. The smoke check opens real account entry, switches to the
+explicitly labeled local demo, returns, and renders account entry at font scale
+1.3 and 2.0. Maximum-font navigation, scrolling to the login control and software
+keyboard open/dismiss checks extend this evidence. PNGs, accessibility hierarchy XML and a JSON report are retained as
+`mobile-android-ui-evidence`. These checks use no server credentials, native login
+or APNs/FCM delivery. Physical Android/iOS accessibility acceptance remains open.
 
 IPM-21 follow-up: mobile/gateway queue claims enforce the eight-attempt budget
 when recovering from a worker crash. Expired exhausted rows become terminal in
@@ -42,3 +51,5 @@ bounded batches; unexpired leases remain unchanged. Real PostgreSQL tests
 simulate persisted crash states, exercise concurrent recovery, and verify no
 ninth forwarding/provider call. The merged baseline reproduced the bug; the
 fixed integration passed. Actual APNs/FCM device delivery remains unverified.
+
+PR #2 merged the retry recovery at `2fa35d225a1abf8baabeafed81c125983aca59bc`.
