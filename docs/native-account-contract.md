@@ -88,3 +88,18 @@ the account index/container. The safe JSON and screenshots are uploaded as
 are removed during cleanup. The final product UI screenshot is an observation,
 not a claim of tested UI interaction, Dynamic Type or accessibility. Check the
 actual run before claiming native iOS success.
+
+## Shared iOS text measurement — IPM-22
+
+Expo UI 58.0.25's iOS universal Text maps explicit system font sizes/weights to
+SwiftUI fixed-point fonts. The common app Text adapter applies React Native's
+accessibility font scale to that system-font style on iOS. It preserves Android
+sp/nonlinear scaling and SwiftUI custom-font automatic scaling. All screens
+continue to use the same universal Expo UI components.
+
+A separate `.fonttest` Release app measures the shared component's actual Host
+content width/height, using normal and maximum accessibility content categories
+in its own disposable simulator. Only public numeric measurements and PNGs are
+exported as `mobile-ios-font-scale-evidence`. This is a component measurement,
+not a full-screen Dynamic Type, VoiceOver, keyboard or physical-device acceptance.
+Check the actual run before calling this native measurement successful.

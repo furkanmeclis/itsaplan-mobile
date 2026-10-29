@@ -1,7 +1,8 @@
+import { Text } from './src/components/Text';
 import { useState } from 'react';
 import { KeyboardAvoidingView, View, useWindowDimensions } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
-import { Host, Column, Row, Text, Button } from '@expo/ui';
+import { Host, Column, Row, Button } from '@expo/ui';
 import DemoApp from './DemoApp';
 import { LiveApp } from './src/screens/LiveApp';
 import { sakinTheme } from './src/theme';

@@ -322,6 +322,27 @@ jobs:
           python3 integration/ios-native-contract.py \
             "ios/build/Build/Products/Release-iphonesimulator/$scheme.app" \
             "$RUNNER_TEMP/ipm-native/state.json"
+      - name: Measure shared text at iOS accessibility maximum size
+        shell: bash
+        run: |
+          set -euo pipefail
+          workspace=$(find ios -maxdepth 1 -name '*.xcworkspace' -print -quit)
+          scheme=$(basename "$workspace" .xcworkspace)
+          printf '\nexport ENTRY_FILE="%s/integration/font-scale-entry.tsx"\n' "$GITHUB_WORKSPACE" >> ios/.xcode.env.local
+          bundle_id=$(node -p 'require("./app.json").expo.ios.bundleIdentifier + ".fonttest"')
+          xcodebuild -workspace "$workspace" -scheme "$scheme" \
+            -configuration Release -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath ios/build -jobs 3 CODE_SIGNING_ALLOWED=NO \
+            PRODUCT_BUNDLE_IDENTIFIER="$bundle_id"
+          python3 integration/ios-font-scale.py "ios/build/Build/Products/Release-iphonesimulator/$scheme.app"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mobile-ios-font-scale-evidence
+          path: test-results/ios-font-scale/
+          if-no-files-found: warn
+          retention-days: 14
       - uses: actions/upload-artifact@v4
         if: always()
         with:
