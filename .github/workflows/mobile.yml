@@ -279,3 +279,62 @@ jobs:
           path: dist/native/itsaplan-ios-simulator.zip
           if-no-files-found: error
           retention-days: 14
+      - uses: actions/checkout@v4
+        with:
+          repository: croffasia/itsaplan
+          ref: 73aadf9945ec4c8a23c749fb4f4dee25b036acb3
+          path: .upstream
+          persist-credentials: false
+      - run: npm ci --prefix services/push
+      - name: Install native fixture prerequisites
+        run: |
+          npm install --prefix "$RUNNER_TEMP/ipm-tools" bun@1.4.3 --no-audit --no-fund
+          brew install postgresql@17
+          pg_bin="$(brew --prefix postgresql@17)/bin"
+          "$pg_bin/initdb" -D "$RUNNER_TEMP/ipm-postgres" -A trust -U postgres
+          "$pg_bin/pg_ctl" -D "$RUNNER_TEMP/ipm-postgres" -l "$RUNNER_TEMP/ipm-postgres.log" -o '-h 127.0.0.1 -p 54329' start
+      - name: Install upstream dependencies from lockfile
+        working-directory: .upstream
+        run: '"$RUNNER_TEMP/ipm-tools/node_modules/.bin/bun" install --frozen-lockfile'
+      - name: Start disposable native HTTPS account fixtures
+        run: |
+          UPSTREAM_ROOT="$GITHUB_WORKSPACE/.upstream" \
+          BUN_BINARY="$RUNNER_TEMP/ipm-tools/node_modules/.bin/bun" \
+          UPSTREAM_DB_URL=postgres://postgres@127.0.0.1:54329/postgres \
+          NATIVE_FIXTURE_DIR="$RUNNER_TEMP/ipm-native" \
+          node integration/run.mjs --serve-native > "$RUNNER_TEMP/ipm-native-startup.log" 2>&1 &
+          node integration/wait-native-fixture.mjs "$RUNNER_TEMP/ipm-native/state.json"
+      - name: Build isolated iOS native contract application
+        shell: bash
+        run: |
+          set -euo pipefail
+          workspace=$(find ios -maxdepth 1 -name '*.xcworkspace' -print -quit)
+          scheme=$(basename "$workspace" .xcworkspace)
+          # The normal simulator artifact was already uploaded. Release uses its
+          # embedded bundle, without a development Metro server.
+          printf '\nexport ENTRY_FILE="%s/integration/native-contract-entry.tsx"\n' "$GITHUB_WORKSPACE" >> ios/.xcode.env.local
+          bundle_id=$(node -p 'require("./app.json").expo.ios.bundleIdentifier + ".contracttest"')
+          xcodebuild -workspace "$workspace" -scheme "$scheme" \
+            -configuration Release -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath ios/build -jobs 3 CODE_SIGNING_ALLOWED=NO \
+            PRODUCT_BUNDLE_IDENTIFIER="$bundle_id"
+          python3 integration/ios-native-contract.py \
+            "ios/build/Build/Products/Release-iphonesimulator/$scheme.app" \
+            "$RUNNER_TEMP/ipm-native/state.json"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mobile-ios-native-account-evidence
+          path: test-results/ios-native-contract/
+          if-no-files-found: warn
+          retention-days: 14
+      - name: Stop disposable native fixtures and PostgreSQL
+        if: always()
+        shell: bash
+        run: |
+          node integration/stop-native-fixture.mjs "$RUNNER_TEMP/ipm-native/state.json"
+          pg_bin="$(brew --prefix postgresql@17)/bin"
+          if test -f "$RUNNER_TEMP/ipm-postgres/postmaster.pid"; then
+            "$pg_bin/pg_ctl" -D "$RUNNER_TEMP/ipm-postgres" -m fast stop
+          fi

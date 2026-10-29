@@ -71,3 +71,20 @@ and test-material isolation; it does not establish native transport success.
 This first native driver targets Android. iOS simulator compilation, iOS native
 Keychain/transport execution, physical-device auth, accessibility and real
 APNs/FCM delivery are separate results. No store publication is performed.
+
+## iOS native contract
+
+After uploading the normal simulator compile artifact, the iOS job builds a
+separate Release `.contracttest` application with the shared contract entry and
+an embedded bundle. The driver creates its own disposable iPhone simulator,
+trusts this run's public localhost CA only in that simulator, then verifies
+native login and Keychain restoration across process termination/relaunch.
+
+The report reader is pinned to AsyncStorage 2.2.0's installed iOS implementation.
+It reads only the two public contract keys, including the MD5-named spill file
+for reports over its inline threshold. It never reads the Keychain or exports
+the account index/container. The safe JSON and screenshots are uploaded as
+`mobile-ios-native-account-evidence`; the simulator and local PostgreSQL instance
+are removed during cleanup. The final product UI screenshot is an observation,
+not a claim of tested UI interaction, Dynamic Type or accessibility. Check the
+actual run before claiming native iOS success.
