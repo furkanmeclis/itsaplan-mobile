@@ -50,11 +50,7 @@ def focused_field_is_visible(root, minimum_height):
     return False
 
 
-def enter_field(label, value, display, secret=False):
-    root, data = smoke.scroll_to_label(label, display, ready=lambda root: smoke.control_within_scroll_view(root, label))
-    minimum_height = max(48, smoke.label_height(root, label))
-    smoke.tap(root, label)
-    root, data = smoke.wait_ui([], ready=lambda root: smoke.keyboard_frame() is not None)
+def scroll_focused_field(root, data, minimum_height):
     # Native caret auto-scroll can leave the control's padding clipped. Exercise
     # the ordinary in-content swipe and require the whole 48px editing control.
     for attempt in range(4):
@@ -77,11 +73,21 @@ def enter_field(label, value, display, secret=False):
         x = bounds[0] + 8
         smoke.adb("shell", "input", "swipe", str(x), str(start), str(x), str(end), "300")
         root, data = smoke.hierarchy()
+    return root, data
+
+
+def enter_field(label, value, display, secret=False):
+    root, data = smoke.scroll_to_label(label, display, ready=lambda root: smoke.control_within_scroll_view(root, label))
+    minimum_height = max(48, smoke.label_height(root, label))
+    smoke.tap(root, label)
+    root, data = smoke.wait_ui([], ready=lambda root: smoke.keyboard_frame() is not None)
+    root, data = scroll_focused_field(root, data, minimum_height)
     try:
         smoke.adb("shell", "input", "text", value)
     except subprocess.SubprocessError:
         raise AssertionError("Native form input command failed") from None
-    root, data = smoke.wait_ui([], ready=lambda root: focused_field_is_visible(root, minimum_height))
+    root, data = smoke.hierarchy()
+    root, data = scroll_focused_field(root, data, minimum_height)
     if secret:
         if value.encode() in data or not any(node.get("password") == "true" and node.get("focused") == "true" for node in root.iter("node")):
             raise AssertionError("Native password field did not mask its value")
