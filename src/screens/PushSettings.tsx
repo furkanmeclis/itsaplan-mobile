@@ -1,5 +1,6 @@
+import { Text } from '../components/Text';
 import { useEffect, useState } from 'react';
-import { Column, Text, Button, Switch } from '@expo/ui';
+import { Column, Button, Switch } from '@expo/ui';
 import { plannerClient } from '../api/nativeClient';
 import { connectedAccounts } from '../storage/connectedAccounts';
 import { pushManager } from '../storage/push';

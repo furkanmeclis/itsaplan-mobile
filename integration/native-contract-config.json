@@ -1,0 +1,11 @@
+{
+  "servers": ["https://localhost:34561", "https://localhost:34562"],
+  "webOrigin": "https://localhost:3400",
+  "password": "Disposable-test-password-123",
+  "nativeAccounts": [
+    { "serverIndex": 0, "name": "First", "email": "first@example.test" },
+    { "serverIndex": 1, "name": "Second", "email": "first@example.test" },
+    { "serverIndex": 0, "name": "Other", "email": "other@example.test" }
+  ],
+  "uiAccount": { "serverIndex": 1, "name": "Partner", "email": "partner@example.test" }
+}

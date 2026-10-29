@@ -1,7 +1,8 @@
+import { Text } from './src/components/Text';
 import { useEffect, useState, type ReactNode } from 'react';
 import { BackHandler, Platform, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import { Host, Column, Row, Text, Button, ScrollView, Switch, TextInput } from '@expo/ui';
+import { Host, Column, Row, Button, ScrollView, Switch, TextInput } from '@expo/ui';
 import { sakinTheme, type Theme } from './src/theme';
 import { accountKey, resourceKey, type Account } from './src/domain/accounts';
 import { createDemoData, demoAccounts, type DemoTask } from './src/demo/data';

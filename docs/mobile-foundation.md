@@ -143,6 +143,11 @@ unwrapped width growth. The common Expo UI header stacks vertically when
 font-adjusted window width is below 250 dp. Physical-device and screen-reader
 acceptance remain separate work.
 
+The [native account contract](native-account-contract.md) uses a separate test-only
+APK and disposable HTTPS backends to verify Expo fetch/SecureStore on Android.
+Consult its actual run evidence; normal builds and UI demo checks do not establish
+native authenticated transport or physical-device acceptance.
+
 The app uses one React Native KeyboardAvoidingView around its safe-area content
 with padding behavior on both platforms. This gives the Expo UI scrollable form
 room above the software keyboard. Android emulator verification must establish

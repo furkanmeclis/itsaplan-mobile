@@ -165,3 +165,13 @@ class FormEvidence(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ExactControlTarget(unittest.TestCase):
+    def test_accounts_tab_wins_over_caption_containing_the_same_word(self):
+        root = ET.fromstring('<hierarchy><node text="Self-host · Hesapların ayrı tutulur" bounds="[24,168][296,198]"/>'
+                             '<node clickable="true" bounds="[244,222][296,262]">'
+                             '<node text="Hesaplar" bounds="[268,234][296,250]"/></node></hierarchy>')
+        with patch.object(smoke, 'adb') as adb:
+            smoke.tap(root, 'Hesaplar')
+        adb.assert_called_once_with('shell', 'input', 'tap', '270', '242')

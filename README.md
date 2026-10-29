@@ -27,6 +27,9 @@ See [the mobile foundation and validation guide](docs/mobile-foundation.md) and
 web URL fields, supported password login, storage and two-server integration test.
 Theme values are in `src/theme.ts`.
 
+The [native account contract](docs/native-account-contract.md) describes the
+isolated Android session/storage test build and its evidence boundaries.
+
 ## Design review
 
 Download [the standalone HTML prototype](design/tasarim-secimi.html) and open it in a browser. It has no external dependencies and works offline.

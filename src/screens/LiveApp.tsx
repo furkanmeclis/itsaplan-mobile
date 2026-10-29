@@ -1,6 +1,7 @@
+import { Text } from '../components/Text';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { AppState, BackHandler } from 'react-native';
-import { Host, ScrollView, Column as Stack, Row, Text, Button, TextInput } from '@expo/ui';
+import { Host, ScrollView, Column as Stack, Row, Button, TextInput } from '@expo/ui';
 import { StatusBar } from 'expo-status-bar';
 import { accountKey, resourceKey } from '../domain/accounts';
 import { acknowledgeRead, appendInboxPage, mergeInbox, notificationLabel } from '../domain/inbox';
