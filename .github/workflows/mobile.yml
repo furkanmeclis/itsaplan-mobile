@@ -366,13 +366,11 @@ jobs:
           scheme=$(basename "$workspace" .xcworkspace)
           # The normal simulator artifact was already uploaded. Release uses its
           # embedded bundle, without a development Metro server.
-          printf '\nexport ENTRY_FILE="%s/integration/native-contract-entry.tsx"\n' "$GITHUB_WORKSPACE" >> ios/.xcode.env.local
-          bundle_id=$(node -p 'require("./app.json").expo.ios.bundleIdentifier + ".contracttest"')
+          node integration/prepare-ios-contract.mjs contract
           xcodebuild -workspace "$workspace" -scheme "$scheme" \
             -configuration Release -sdk iphonesimulator \
             -destination 'generic/platform=iOS Simulator' \
-            -derivedDataPath ios/build -jobs 3 CODE_SIGNING_ALLOWED=NO \
-            PRODUCT_BUNDLE_IDENTIFIER="$bundle_id" ARCHS="$(uname -m)" ONLY_ACTIVE_ARCH=YES
+            -derivedDataPath ios/build -jobs 3 ARCHS="$(uname -m)" ONLY_ACTIVE_ARCH=YES
           python3 integration/ios-native-contract.py \
             "ios/build/Build/Products/Release-iphonesimulator/$scheme.app" \
             "$RUNNER_TEMP/ipm-native/state.json"
@@ -382,13 +380,11 @@ jobs:
           set -euo pipefail
           workspace=$(find ios -maxdepth 1 -name '*.xcworkspace' -print -quit)
           scheme=$(basename "$workspace" .xcworkspace)
-          printf '\nexport ENTRY_FILE="%s/integration/font-scale-entry.tsx"\n' "$GITHUB_WORKSPACE" >> ios/.xcode.env.local
-          bundle_id=$(node -p 'require("./app.json").expo.ios.bundleIdentifier + ".fonttest"')
+          node integration/prepare-ios-contract.mjs font
           xcodebuild -workspace "$workspace" -scheme "$scheme" \
             -configuration Release -sdk iphonesimulator \
             -destination 'generic/platform=iOS Simulator' \
-            -derivedDataPath ios/build -jobs 3 CODE_SIGNING_ALLOWED=NO \
-            PRODUCT_BUNDLE_IDENTIFIER="$bundle_id" ARCHS="$(uname -m)" ONLY_ACTIVE_ARCH=YES
+            -derivedDataPath ios/build -jobs 3 ARCHS="$(uname -m)" ONLY_ACTIVE_ARCH=YES
           python3 integration/ios-font-scale.py "ios/build/Build/Products/Release-iphonesimulator/$scheme.app"
       - uses: actions/upload-artifact@v4
         if: always()

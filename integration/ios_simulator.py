@@ -2,26 +2,23 @@
 import plistlib
 import re
 import subprocess
-import tempfile
 import time
 from pathlib import Path
 
 
-def sign_simulator_test_app(app):
+def verify_simulator_test_app(app):
     app = Path(app).resolve()
-    bundle = plistlib.loads((app / 'Info.plist').read_bytes())['CFBundleIdentifier']
-    if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9.-]{1,150}', bundle) or not bundle.endswith(('.contracttest', '.fonttest')):
-        raise AssertionError('Refusing CI simulator signing for a pilot application')
-    # No pretend Developer Team: the ad-hoc simulator identity is the test bundle.
-    # DER entitlements are required by modern simulator signature validation.
-    entitlements = {'application-identifier': bundle, 'keychain-access-groups': [bundle], 'get-task-allow': True}
-    with tempfile.TemporaryDirectory(prefix='ipm-sim-sign-') as temporary:
-        file = Path(temporary) / 'entitlements.plist'
-        file.write_bytes(plistlib.dumps(entitlements))
-        file.chmod(0o600)
-        subprocess.run(['codesign', '--force', '--deep', '--sign', '-', str(app)], check=True, capture_output=True)
-        subprocess.run(['codesign', '--force', '--sign', '-', '--generate-entitlement-der', '--entitlements', str(file), str(app)], check=True, capture_output=True)
-        subprocess.run(['codesign', '--verify', '--deep', '--strict', str(app)], check=True, capture_output=True)
+    info = plistlib.loads((app / 'Info.plist').read_bytes())
+    bundle = info['CFBundleIdentifier']
+    if not bundle.endswith(('.contracttest', '.fonttest')):
+        raise AssertionError('Refusing simulator contract execution for a pilot application')
+    executable = app / info['CFBundleExecutable']
+    if not executable.is_file():
+        raise AssertionError('Simulator test executable is missing')
+    subprocess.run(['codesign', '--verify', '--deep', '--strict', str(app)], check=True, capture_output=True)
+    sections = subprocess.check_output(['xcrun', 'otool', '-l', str(executable)], text=True)
+    if '__entitlements' not in sections and '__ents_der' not in sections:
+        raise AssertionError('Xcode did not embed simulator-specific Keychain entitlements')
 
 
 def launch_simulator_app(simulator, bundle):
